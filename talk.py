@@ -57,8 +57,14 @@ class Speaker:
 
 def main():
     parser = argparse.ArgumentParser(description="Text to Speech Conversion")
-    parser.add_argument("-i", "--input-file", type=str, default="in.txt",
-                      help="Input text file (default: in.txt)")
+
+    # Create mutually exclusive group for input source
+    input_group = parser.add_mutually_exclusive_group()
+    input_group.add_argument("-i", "--input-file", type=str,
+                      help="Input text file (default: in.txt if neither -i nor -t specified)")
+    input_group.add_argument("-t", "--text", type=str,
+                      help="Text to convert (provide text directly in quotes)")
+
     parser.add_argument("-o", "--output-file", type=str, default="out.mp3",
                       help="Output audio file (default: out.mp3)")
     parser.add_argument("-m", "--model", type=str, default="tts-1",
@@ -68,27 +74,35 @@ def main():
                       choices=["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
                       help="Voice to use (default: alloy)")
     args = parser.parse_args()
-    
+
     try:
-        with open(args.input_file, 'r', encoding='utf-8') as f:
-            text = f.read().strip()
-            
+        # Determine text source
+        if args.text:
+            text = args.text.strip()
+        else:
+            # Use input file (default to in.txt if not specified)
+            input_file = args.input_file if args.input_file else "in.txt"
+            with open(input_file, 'r', encoding='utf-8') as f:
+                text = f.read().strip()
+
         if not text:
-            print(f"No text found in {args.input_file}")
+            source = "command line" if args.text else (args.input_file or "in.txt")
+            print(f"No text found from {source}")
             return
-            
+
         print(f"input_len[/max_chars]: {len(text)}[/{MAX_CHARS}]")
         print(f"Converting text to speech using {args.model} with {args.voice} voice...")
         speaker = Speaker()
         audio_data = speaker.speak(text, args.model, args.voice)
-        
+
         with open(args.output_file, 'wb') as f:
             f.write(audio_data)
-            
+
         print(f"Audio saved to: {args.output_file}")
-        
+
     except FileNotFoundError:
-        print(f"Input file not found: {args.input_file}")
+        input_file = args.input_file if args.input_file else "in.txt"
+        print(f"Input file not found: {input_file}")
     except Exception as e:
         print(f"Error: {e}")
 
