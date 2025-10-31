@@ -35,10 +35,28 @@ Basic usage (reads from in.txt, outputs to out.mp3):
 python talk.py
 ```
 
-With options:
+Command-line text input with immediate playback (requires cvlc):
+```bash
+python talk.py -t "Hello world" -p
+```
+
+File-based input with custom output:
 ```bash
 python talk.py -i input.txt -o output.mp3 -m tts-1-hd -v nova
 ```
+
+Direct text with specific voice:
+```bash
+python talk.py -t "Testing nova voice" -v nova -o greeting.mp3
+```
+
+Options:
+- `-i/--input-file`: Read text from file (mutually exclusive with -t)
+- `-t/--text`: Provide text directly in quotes (mutually exclusive with -i)
+- `-o/--output-file`: Save to specific file (mutually exclusive with -p)
+- `-p/--play`: Play immediately with cvlc and save to temp file (mutually exclusive with -o)
+- `-m/--model`: TTS model (tts-1 or tts-1-hd)
+- `-v/--voice`: Voice selection (alloy, echo, fable, onyx, nova, shimmer)
 
 Available voices: alloy, echo, fable, onyx, nova, shimmer
 Available models: tts-1, tts-1-hd
@@ -71,7 +89,15 @@ Options:
   - Processes chunks sequentially and concatenates audio
   - Smart chunking tries sentence breaks (. ! ?), then line breaks, then spaces
 
-- **Main flow**: Read text → chunk if needed → generate audio → save as MP3
+- **Input modes** (mutually exclusive):
+  - File mode: Read from file specified with -i (default: in.txt)
+  - Direct mode: Accept text from command-line with -t
+
+- **Output modes** (mutually exclusive):
+  - Save mode: Write to file specified with -o (default: out.mp3)
+  - Play mode: Save to timestamped temp file and play with cvlc
+
+- **Main flow**: Read/receive text → chunk if needed → generate audio → save MP3 → optionally play
 
 ### listen.py Architecture
 
@@ -97,6 +123,9 @@ Options:
 3. **Voice detection**: Amplitude-based (no ML) for simplicity and speed
 4. **Text chunking**: Sentence-aware to avoid mid-word cuts in TTS
 5. **Clipboard integration**: listen.py auto-copies transcription for quick pasting
+6. **Mutual exclusivity**: Both input modes (-i/-t) and output modes (-o/-p) in talk.py are enforced at argparse level
+7. **Temp file preservation**: Play mode keeps generated audio in temp directory for later replay
+8. **cvlc integration**: Immediate playback mode checks for cvlc availability before processing
 
 ### Important Constants
 
