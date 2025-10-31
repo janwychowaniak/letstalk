@@ -205,3 +205,35 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+# Environments
+.env
+.envrc
+.env.local
+env/
+ENV/
+env.bak/
+
+# Aider
+.aider*
+
+# Claude Code - personal/session files only
+.claude/settings.local.json
+.claude/*.log
+.claude/logs/
+.claude/cache/
+
+
+#  ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
+
+# Generated audio files
+*.mp3
+*.wav
+
+# Input text files
+in.txt
