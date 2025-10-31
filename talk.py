@@ -1,5 +1,9 @@
 import argparse
 import os
+import shutil
+import subprocess
+import tempfile
+from datetime import datetime
 
 import openai
 
@@ -65,8 +69,13 @@ def main():
     input_group.add_argument("-t", "--text", type=str,
                       help="Text to convert (provide text directly in quotes)")
 
-    parser.add_argument("-o", "--output-file", type=str, default="out.mp3",
-                      help="Output audio file (default: out.mp3)")
+    # Create mutually exclusive group for output mode
+    output_group = parser.add_mutually_exclusive_group()
+    output_group.add_argument("-o", "--output-file", type=str,
+                      help="Output audio file (default: out.mp3 if -p not specified)")
+    output_group.add_argument("-p", "--play", action="store_true",
+                      help="Play audio immediately using cvlc (saves to temp file)")
+
     parser.add_argument("-m", "--model", type=str, default="tts-1",
                       choices=["tts-1", "tts-1-hd"],
                       help="TTS model to use (default: tts-1)")
@@ -76,6 +85,12 @@ def main():
     args = parser.parse_args()
 
     try:
+        # Check cvlc availability if play mode requested
+        if args.play:
+            if not shutil.which('cvlc'):
+                print("Error: cvlc not found. Please install VLC media player.")
+                return
+
         # Determine text source
         if args.text:
             text = args.text.strip()
@@ -95,10 +110,27 @@ def main():
         speaker = Speaker()
         audio_data = speaker.speak(text, args.model, args.voice)
 
-        with open(args.output_file, 'wb') as f:
+        # Determine output file
+        if args.play:
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            output_file = os.path.join(tempfile.gettempdir(), f"talk-out-{timestamp}.mp3")
+        else:
+            output_file = args.output_file if args.output_file else "out.mp3"
+
+        # Save audio file
+        with open(output_file, 'wb') as f:
             f.write(audio_data)
 
-        print(f"Audio saved to: {args.output_file}")
+        print(f"Audio saved to: {output_file}")
+
+        # Play audio if requested
+        if args.play:
+            try:
+                subprocess.run(['cvlc', '--play-and-exit', output_file], check=True)
+                print(f"\nTo replay: cvlc --play-and-exit {output_file}")
+            except subprocess.CalledProcessError as e:
+                print(f"Error playing audio: {e}")
+                print(f"Audio file saved at: {output_file}")
 
     except FileNotFoundError:
         input_file = args.input_file if args.input_file else "in.txt"
