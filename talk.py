@@ -13,8 +13,8 @@ MAX_CHARS = 4096  # OpenAI TTS character limit
 
 class Speaker:
     def __init__(self):
-        self.client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY_TTS'))
-        
+        self.client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY_TTS"))
+
     def speak(self, text: str, model: str, voice: str) -> bytes:
         # Split text into chunks of MAX_CHARS, trying to break at sentences
         chunks = []
@@ -22,25 +22,25 @@ class Speaker:
             if len(text) <= MAX_CHARS:
                 chunks.append(text)
                 break
-            
+
             # Find the last sentence break within the limit
-            split_point = text[:MAX_CHARS].rfind('.')
+            split_point = text[:MAX_CHARS].rfind(".")
             if split_point == -1:  # No sentence break found, try other delimiters
-                split_point = text[:MAX_CHARS].rfind('!')
+                split_point = text[:MAX_CHARS].rfind("!")
             if split_point == -1:
-                split_point = text[:MAX_CHARS].rfind('?')
+                split_point = text[:MAX_CHARS].rfind("?")
             if split_point == -1:  # Still no break found, try line break
-                split_point = text[:MAX_CHARS].rfind('\n')
+                split_point = text[:MAX_CHARS].rfind("\n")
             if split_point == -1:  # Last resort: split at space
-                split_point = text[:MAX_CHARS].rfind(' ')
+                split_point = text[:MAX_CHARS].rfind(" ")
             if split_point == -1:  # No natural breaks, force split
                 split_point = MAX_CHARS - 1
-                
+
             print(f"chunk_len/remaining_len: {len(text[:split_point + 1])}/{len(text[split_point + 1:])}")
 
             chunks.append(text[:split_point + 1])
             text = text[split_point + 1:].lstrip()
-        
+
         # Process each chunk
         audio_chunks = []
         total_chunks = len(chunks)
@@ -53,9 +53,9 @@ class Speaker:
                 input=chunk
             )
             audio_chunks.append(response.content)
-        
+
         # Combine all chunks into single audio stream
-        return b''.join(audio_chunks)
+        return b"".join(audio_chunks)
 
 # ____________________________________________________________________________________________
 
@@ -87,7 +87,7 @@ def main():
     try:
         # Check cvlc availability if play mode requested
         if args.play:
-            if not shutil.which('cvlc'):
+            if not shutil.which("cvlc"):
                 print("Error: cvlc not found. Please install VLC media player.")
                 return
 
@@ -97,7 +97,7 @@ def main():
         else:
             # Use input file (default to in.txt if not specified)
             input_file = args.input_file if args.input_file else "in.txt"
-            with open(input_file, 'r', encoding='utf-8') as f:
+            with open(input_file, "r", encoding="utf-8") as f:
                 text = f.read().strip()
 
         if not text:
@@ -118,7 +118,7 @@ def main():
             output_file = args.output_file if args.output_file else "out.mp3"
 
         # Save audio file
-        with open(output_file, 'wb') as f:
+        with open(output_file, "wb") as f:
             f.write(audio_data)
 
         print(f"Audio saved to: {output_file}")
@@ -126,8 +126,8 @@ def main():
         # Play audio if requested
         if args.play:
             try:
-                subprocess.run(['cvlc', '--play-and-exit', output_file], check=True)
-                print(f"\nTo replay: cvlc --play-and-exit {output_file}")
+                subprocess.run(["cvlc", "--play-and-exit", output_file], check=True)
+                print(f"\nTo replay:\ncvlc --play-and-exit {output_file}")
             except subprocess.CalledProcessError as e:
                 print(f"Error playing audio: {e}")
                 print(f"Audio file saved at: {output_file}")
