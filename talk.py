@@ -2,6 +2,7 @@ import argparse
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from datetime import datetime
 
@@ -60,14 +61,30 @@ class Speaker:
 # ____________________________________________________________________________________________
 
 def main():
-    parser = argparse.ArgumentParser(description="Text to Speech Conversion")
+    parser = argparse.ArgumentParser(
+        description="Text to Speech Conversion",
+        epilog="""
+Examples:
+  # Read from file (default: in.txt)
+  %(prog)s
+  %(prog)s -i story.txt -o story.mp3
+  
+  # Direct text input
+  %(prog)s -t "Hello world" -p
+  
+  # Piped stdin input
+  echo "Hello world" | %(prog)s -p
+  cat article.txt | %(prog)s -o article.mp3
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
 
     # Create mutually exclusive group for input source
     input_group = parser.add_mutually_exclusive_group()
     input_group.add_argument("-i", "--input-file", type=str,
-                      help="Input text file (default: in.txt if neither -i nor -t specified)")
+                      help="Input text file (default: in.txt if no input method specified). Mutually exclusive with -t and piped stdin")
     input_group.add_argument("-t", "--text", type=str,
-                      help="Text to convert (provide text directly in quotes)")
+                      help="Text to convert (provide text directly in quotes). Mutually exclusive with -i and piped stdin")
 
     # Create mutually exclusive group for output mode
     output_group = parser.add_mutually_exclusive_group()
@@ -84,6 +101,20 @@ def main():
                       help="Voice to use (default: alloy)")
     args = parser.parse_args()
 
+    # Detect if data is being piped via stdin
+    stdin_has_data = not sys.stdin.isatty()
+
+    # Validate mutual exclusivity of input sources
+    input_sources = sum([
+        args.text is not None,
+        args.input_file is not None,
+        stdin_has_data
+    ])
+
+    if input_sources > 1:
+        print("Error: Only one input source allowed: -t, -i, or piped stdin")
+        return
+
     try:
         # Check cvlc availability if play mode requested
         if args.play:
@@ -91,17 +122,21 @@ def main():
                 print("Error: cvlc not found. Please install VLC media player.")
                 return
 
-        # Determine text source
-        if args.text:
+        # Determine text source (three mutually exclusive ways)
+        if stdin_has_data:
+            text = sys.stdin.read().strip()
+            source = "stdin"
+        elif args.text:
             text = args.text.strip()
+            source = "command line"
         else:
             # Use input file (default to in.txt if not specified)
             input_file = args.input_file if args.input_file else "in.txt"
             with open(input_file, "r", encoding="utf-8") as f:
                 text = f.read().strip()
+            source = input_file
 
         if not text:
-            source = "command line" if args.text else (args.input_file or "in.txt")
             print(f"No text found from {source}")
             return
 

@@ -172,6 +172,9 @@ See `AudioRecorder.record_until_silence()` for amplitude-based silence detection
 ### Mutually Exclusive Modes
 Use argparse groups to enforce exclusive options (e.g., `-i` vs `-t`, `-o` vs `-p`).
 
+### Stdin Input Detection
+See `main()` in `talk.py` for implicit stdin pipe detection using `sys.stdin.isatty()`. Manual validation ensures mutual exclusivity with `-i` and `-t` flags since `argparse` doesn't support stdin in mutually exclusive groups.
+
 ## Architecture Constraints
 
 - **No shared modules**: Each script must be fully standalone

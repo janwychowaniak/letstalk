@@ -8,7 +8,7 @@ A simple Python toolkit for speech-to-text (STT) and text-to-speech (TTS) conver
 
 - **Text-to-Speech (talk.py)**
   - Convert text to natural-sounding speech using OpenAI's TTS models
-  - Input from file or command-line
+  - Input from file, command-line, or piped stdin
   - Save to MP3 or play immediately
   - Six voice options and two quality levels
   - Automatic text chunking for long inputs
@@ -65,6 +65,15 @@ Default behavior (reads `in.txt`, saves `out.mp3`):
 ```bash
 python talk.py
 ```
+
+Pipe text via stdin:
+```bash
+echo "Hello world" | python talk.py -p
+cat article.txt | python talk.py -o article.mp3
+pbpaste | python talk.py -v nova -p  # macOS clipboard
+```
+
+**Note:** Only one input method can be used at a time: `-i`, `-t`, or piped stdin.
 
 **Options:**
 - `-i/--input-file FILE`: Read text from file (default: in.txt)

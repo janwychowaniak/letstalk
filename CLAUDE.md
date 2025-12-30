@@ -50,9 +50,15 @@ Direct text with specific voice:
 python talk.py -t "Testing nova voice" -v nova -o greeting.mp3
 ```
 
+Pipe text via stdin:
+```bash
+echo "Hello world" | python talk.py -p
+cat article.txt | python talk.py -o article.mp3
+```
+
 Options:
-- `-i/--input-file`: Read text from file (mutually exclusive with -t)
-- `-t/--text`: Provide text directly in quotes (mutually exclusive with -i)
+- `-i/--input-file`: Read text from file (mutually exclusive with -t and piped stdin)
+- `-t/--text`: Provide text directly in quotes (mutually exclusive with -i and piped stdin)
 - `-o/--output-file`: Save to specific file (mutually exclusive with -p)
 - `-p/--play`: Play immediately with cvlc and save to temp file (mutually exclusive with -o)
 - `-m/--model`: TTS model (tts-1 or tts-1-hd)
@@ -92,6 +98,7 @@ Options:
 - **Input modes** (mutually exclusive):
   - File mode: Read from file specified with -i (default: in.txt)
   - Direct mode: Accept text from command-line with -t
+  - Stdin mode: Read from piped stdin (implicit detection via sys.stdin.isatty())
 
 - **Output modes** (mutually exclusive):
   - Save mode: Write to file specified with -o (default: out.mp3)
@@ -124,8 +131,9 @@ Options:
 4. **Text chunking**: Sentence-aware to avoid mid-word cuts in TTS
 5. **Clipboard integration**: listen.py auto-copies transcription for quick pasting
 6. **Mutual exclusivity**: Both input modes (-i/-t) and output modes (-o/-p) in talk.py are enforced at argparse level
-7. **Temp file preservation**: Play mode keeps generated audio in temp directory for later replay
-8. **cvlc integration**: Immediate playback mode checks for cvlc availability before processing
+7. **Stdin input detection**: talk.py uses sys.stdin.isatty() to detect piped input, with manual validation for mutual exclusivity since argparse doesn't support stdin in mutually exclusive groups
+8. **Temp file preservation**: Play mode keeps generated audio in temp directory for later replay
+9. **cvlc integration**: Immediate playback mode checks for cvlc availability before processing
 
 ### Important Constants
 
