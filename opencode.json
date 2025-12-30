@@ -1,6 +1,13 @@
 {
-  "instructions": [
-    "CLAUDE.md"
-  ],
-  "$schema": "https://opencode.ai/config.json"
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CLAUDE.md"],
+  "model": "openrouter/anthropic/claude-sonnet-4-5",
+  "small_model": "openrouter/anthropic/claude-haiku-4-5",
+  "provider": {
+    "openrouter": {
+      "options": {
+        "timeout": 600000
+      }
+    }
+  }
 }
