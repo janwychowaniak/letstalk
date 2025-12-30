@@ -126,8 +126,8 @@ def main():
         # Play audio if requested
         if args.play:
             try:
-                subprocess.run(["cvlc", "--play-and-exit", output_file], check=True)
-                print(f"\nTo replay:\ncvlc --play-and-exit {output_file}")
+                subprocess.run(["cvlc", "--rate=1.3", "--play-and-exit", output_file], check=True)
+                print(f"\nTo replay:\ncvlc --rate=1.3 --play-and-exit {output_file}")
             except subprocess.CalledProcessError as e:
                 print(f"Error playing audio: {e}")
                 print(f"Audio file saved at: {output_file}")
