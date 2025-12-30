@@ -81,7 +81,7 @@ pbpaste | python talk.py -v nova -p  # macOS clipboard
 - `-o/--output-file FILE`: Save to specific file (default: out.mp3)
 - `-p/--play`: Play immediately with cvlc and save to temp file
 - `-m/--model MODEL`: TTS model (tts-1 or tts-1-hd, default: tts-1)
-- `-v/--voice VOICE`: Voice selection (alloy, echo, fable, onyx, nova, shimmer, default: alloy)
+- `-v/--voice VOICE`: Voice selection (alloy, echo, fable, onyx, nova, shimmer, default: nova)
 
 ### Speech-to-Text (listen.py)
 

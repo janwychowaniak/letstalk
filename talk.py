@@ -96,9 +96,9 @@ Examples:
     parser.add_argument("-m", "--model", type=str, default="tts-1",
                       choices=["tts-1", "tts-1-hd"],
                       help="TTS model to use (default: tts-1)")
-    parser.add_argument("-v", "--voice", type=str, default="alloy",
+    parser.add_argument("-v", "--voice", type=str, default="nova",
                       choices=["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
-                      help="Voice to use (default: alloy)")
+                      help="Voice to use (default: nova)")
     args = parser.parse_args()
 
     # Detect if data is being piped via stdin
