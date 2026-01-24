@@ -211,7 +211,8 @@ __marimo__/
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
-# Environments
+# --------------- Environments ---------------
+
 .env
 .envrc
 .env.local
@@ -219,7 +220,10 @@ env/
 ENV/
 env.bak/
 
+# --------------- AI -------------------------
+
 # Aider
+.aider.conf.yml
 .aider*
 
 # Claude Code - personal/session files only
@@ -227,6 +231,9 @@ env.bak/
 .claude/*.log
 .claude/logs/
 .claude/cache/
+
+# OpenCode - session data and local files
+.opencode/
 
 
 #  ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
