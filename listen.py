@@ -1,5 +1,6 @@
 import argparse
 import os
+from datetime import datetime
 from pathlib import Path
 import tempfile
 import wave
@@ -179,14 +180,14 @@ def main():
     try:
         frames = recorder.record_until_silence(max_duration=args.duration)
 
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
-            temp_audio_path = temp_audio.name
-            recorder.save_frames(frames, temp_audio_path)
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        temp_audio_path = os.path.join(tempfile.gettempdir(), f"listen-in-{timestamp}.wav")
+        recorder.save_frames(frames, temp_audio_path)
 
-            if args.backup:
-                print(f"Debug mode: Audio saved to {temp_audio_path}")
-            else:
-                transcribe_and_copy(Path(temp_audio_path), args.language, args.service)
+        if args.backup:
+            print(f"Debug mode: Audio saved to {temp_audio_path}")
+        else:
+            transcribe_and_copy(Path(temp_audio_path), args.language, args.service)
 
     finally:
         recorder.cleanup()
