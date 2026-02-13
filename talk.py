@@ -64,17 +64,16 @@ def main():
     parser = argparse.ArgumentParser(
         description="Text to Speech Conversion",
         epilog="""
-Examples:
-  # Read from file (default: in.txt)
-  %(prog)s
-  %(prog)s -i story.txt -o story.mp3
-  
-  # Direct text input
-  %(prog)s -t "Hello world" -p
-  
-  # Piped stdin input
-  echo "Hello world" | %(prog)s -p
-  cat article.txt | %(prog)s -o article.mp3
+ Examples:
+   # Read from input file
+   %(prog)s -i story.txt
+   
+   # Direct text input
+   %(prog)s -t "Hello world" -p
+   
+   # Piped stdin input
+   echo "Hello world" | %(prog)s -p
+   cat article.txt | %(prog)s -p
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -86,12 +85,8 @@ Examples:
     input_group.add_argument("-t", "--text", type=str,
                       help="Text to convert (provide text directly in quotes). Mutually exclusive with -i and piped stdin")
 
-    # Create mutually exclusive group for output mode
-    output_group = parser.add_mutually_exclusive_group()
-    output_group.add_argument("-o", "--output-file", type=str,
-                      help="Output audio file (default: out.mp3 if -p not specified)")
-    output_group.add_argument("-p", "--play", action="store_true",
-                      help="Play audio immediately using cvlc (saves to temp file)")
+    parser.add_argument("-p", "--play", action="store_true",
+                      help="Play audio immediately using cvlc (after saving to temp file)")
 
     parser.add_argument("-m", "--model", type=str, default="tts-1",
                       choices=["tts-1", "tts-1-hd"],
@@ -145,12 +140,9 @@ Examples:
         speaker = Speaker()
         audio_data = speaker.speak(text, args.model, args.voice)
 
-        # Determine output file
-        if args.play:
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            output_file = os.path.join(tempfile.gettempdir(), f"talk-out-{timestamp}.mp3")
-        else:
-            output_file = args.output_file if args.output_file else "out.mp3"
+        # Determine output file (always temp with timestamp)
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        output_file = os.path.join(tempfile.gettempdir(), f"talk-out-{timestamp}.mp3")
 
         # Save audio file
         with open(output_file, "wb") as f:
@@ -162,10 +154,10 @@ Examples:
         if args.play:
             try:
                 subprocess.run(["cvlc", "--rate=1.3", "--play-and-exit", output_file], check=True)
-                print(f"\nTo replay:\ncvlc --rate=1.3 --play-and-exit {output_file}")
             except subprocess.CalledProcessError as e:
                 print(f"Error playing audio: {e}")
-                print(f"Audio file saved at: {output_file}")
+
+        print(f"\nTo play:\nvlc --rate=1.3 --play-and-exit \"{output_file}\"")
 
     except FileNotFoundError:
         input_file = args.input_file if args.input_file else "in.txt"
