@@ -32,26 +32,23 @@ The scripts require API keys configured as environment variables:
 
 #### Text-to-Speech (talk.py)
 
-Basic usage (reads from in.txt, outputs to out.mp3):
-```bash
-python talk.py
-```
-
 Command-line text input with immediate playback (requires cvlc):
 ```bash
 python talk.py -t "Hello world" -p
 ```
 
-File-based input with custom output:
+File-based input with playback:
 ```bash
-python talk.py -i input.txt -o output.mp3 -m tts-1-hd -v nova
+python talk.py -i input.txt -p
 ```
 
-Pipe text via stdin:
+Pipe text via stdin with playback:
 ```bash
 echo "Hello world" | python talk.py -p
-cat article.txt | python talk.py -o article.mp3
+cat article.txt | python talk.py -p
 ```
+
+Without -p, audio is saved to temp file and playback command is printed.
 
 Options:
 - `-i/--input-file`: Read text from file (mutually exclusive with -t and piped stdin)
