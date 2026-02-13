@@ -82,7 +82,7 @@ Examples:
     # Create mutually exclusive group for input source
     input_group = parser.add_mutually_exclusive_group()
     input_group.add_argument("-i", "--input-file", type=str,
-                      help="Input text file (default: in.txt if no input method specified). Mutually exclusive with -t and piped stdin")
+                      help="Input text file. Mutually exclusive with -t and piped stdin")
     input_group.add_argument("-t", "--text", type=str,
                       help="Text to convert (provide text directly in quotes). Mutually exclusive with -i and piped stdin")
 
@@ -111,8 +111,8 @@ Examples:
         stdin_has_data
     ])
 
-    if input_sources > 1:
-        print("Error: Only one input source allowed: -t, -i, or piped stdin")
+    if input_sources != 1:
+        print("Error: Exactly one input source required: -t, -i, or piped stdin")
         return
 
     try:
