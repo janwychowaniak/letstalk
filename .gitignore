@@ -234,13 +234,3 @@ env.bak/
 
 # OpenCode - session data and local files
 .opencode/
-
-
-#  ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~
-
-# Generated audio files
-*.mp3
-*.wav
-
-# Input text files
-in.txt
