@@ -1,6 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": ["CLAUDE.md"],
   "model": "openrouter/x-ai/grok-code-fast-1",
   "small_model": "openrouter/x-ai/grok-4-fast"
 }
