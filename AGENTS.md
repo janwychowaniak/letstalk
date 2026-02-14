@@ -63,12 +63,17 @@ Available models: tts-1, tts-1-hd
 
 #### Speech-to-Text (listen.py)
 
-Record from microphone:
+**Silence-based recording** (default):
 ```bash
 python listen.py -s groq
 ```
 
-Process existing audio file:
+**Interactive recording** with manual pause/resume:
+```bash
+python listen.py -r -s groq
+```
+
+**Process existing audio file**:
 ```bash
 python listen.py -i recording.wav -s groq
 ```
@@ -76,8 +81,14 @@ python listen.py -i recording.wav -s groq
 Options:
 - `-l/--language`: Language code (e.g., 'en', 'pl')
 - `-s/--service`: STT service (groq or whisper)
-- `-d/--duration`: Max recording duration in seconds (default: 60)
-- `-i/--input`: Process existing audio file instead of recording
+- `-d/--duration`: Max recording duration in seconds (default: 60, ignored in interactive mode)
+- `-r/--record-interactive`: Interactive recording mode with manual pause/resume controls (mutually exclusive with -i)
+- `-i/--input`: Process existing audio file instead of recording (mutually exclusive with -r)
+
+**Interactive mode controls:**
+- Press **Enter** to start recording (from READY state)
+- Press **Enter** to pause/unpause recording (toggles between RECORDING and PAUSED)
+- Press **q** to stop and finalize recording (from any state)
 
 Note: All recorded audio files are automatically preserved in `/tmp` for later inspection.
 
@@ -103,19 +114,31 @@ Note: All recorded audio files are automatically preserved in `/tmp` for later i
 
 ### 3.2. listen.py Architecture
 
-- **AudioRecorder class**: Manages PyAudio recording
+- **AudioRecorder class**: Silence-based recording (default mode)
   - Records in mono, 16kHz, 16-bit PCM format
   - Uses amplitude-based voice activity detection
   - Stops after SILENCE_DURATION seconds of silence (2.0s)
   - Configurable SILENCE_THRESHOLD (800) and max duration
+  - Context manager: automatic PyAudio cleanup
+
+- **InteractiveRecorder class**: Manual pause/resume recording
+  - Same audio format as AudioRecorder (mono, 16kHz, int16 PCM)
+  - State machine: READY → RECORDING ↔ PAUSED → STOPPED
+  - Background daemon thread listens for keypresses using tty/termios cbreak mode
+  - Thread-safe state management via threading.Lock
+  - Audio stream stays open during pauses (reads but discards frames to prevent buffer overflow)
+  - Naive concatenation: no silence trimming at pause boundaries
+  - Shows amplitude meter + state indicator: [RECORDING] / [PAUSED]
+  - Context manager: restores terminal settings and cleans up PyAudio
 
 - **Transcriber class**: Supports two STT services
   - Groq: whisper-large-v3 model
   - OpenAI: whisper-1 model
   - Same interface for both services
 
-- **Two modes**:
-  - Recording mode: Record → save temp WAV → transcribe → copy to clipboard (audio file preserved)
+- **Three modes**:
+  - Silence-based recording mode: Record → save temp WAV → transcribe → copy to clipboard (audio file preserved)
+  - Interactive recording mode: Record with manual pause/resume → save temp WAV → transcribe → copy to clipboard (audio file preserved)
   - File mode: Read existing WAV → transcribe → copy to clipboard
 
 ### 3.3. Key Design Decisions
@@ -130,6 +153,7 @@ Note: All recorded audio files are automatically preserved in `/tmp` for later i
 8. **Temp file preservation**: Play mode keeps generated audio in temp directory for later replay
 9. **cvlc integration**: Immediate playback mode checks for cvlc availability before processing
 10. **Audio file persistence**: listen.py always preserves recorded audio files in /tmp for debugging transcription quality
+11. **Interactive recording**: Uses tty/termios for non-blocking keypress detection with background thread, state machine ensures clean transitions
 
 ### 3.4. Important Constants
 

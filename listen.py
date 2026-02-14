@@ -1,5 +1,9 @@
 import argparse
 import os
+import sys
+import tty
+import termios
+import threading
 from datetime import datetime
 from typing import Optional
 from pathlib import Path
@@ -101,6 +105,130 @@ class AudioRecorder:
         return False
 
 
+class InteractiveRecorder:
+    """Interactive recorder with manual pause/resume control via keypresses."""
+
+    READY = "READY"
+    RECORDING = "RECORDING"
+    PAUSED = "PAUSED"
+    STOPPED = "STOPPED"
+
+    def __init__(self):
+        self.p = pyaudio.PyAudio()
+        self.state = self.READY
+        self.lock = threading.Lock()
+        self.old_term_settings = termios.tcgetattr(sys.stdin)
+
+    def _set_state(self, new_state: str) -> None:
+        with self.lock:
+            self.state = new_state
+
+    def _get_state(self) -> str:
+        with self.lock:
+            return self.state
+
+    def _listen_for_keys(self) -> None:
+        """Background thread: listen for keypresses to control recording state."""
+        try:
+            tty.setcbreak(sys.stdin.fileno())
+            while True:
+                ch = sys.stdin.read(1)
+                current = self._get_state()
+
+                if ch == "\n" or ch == "\r":
+                    if current == self.READY:
+                        self._set_state(self.RECORDING)
+                    elif current == self.RECORDING:
+                        self._set_state(self.PAUSED)
+                    elif current == self.PAUSED:
+                        self._set_state(self.RECORDING)
+                elif ch == "q":
+                    self._set_state(self.STOPPED)
+
+                if self._get_state() == self.STOPPED:
+                    break
+        except Exception:
+            self._set_state(self.STOPPED)
+
+    def record(self) -> list:
+        """Record audio with interactive pause/resume control. Returns list of audio frames."""
+        print("Interactive mode: Press Enter to start recording, q to quit")
+
+        # Start keypress listener thread
+        key_thread = threading.Thread(target=self._listen_for_keys, daemon=True)
+        key_thread.start()
+
+        # Wait for user to press Enter or q
+        while self._get_state() == self.READY:
+            pass
+
+        if self._get_state() == self.STOPPED:
+            print("Recording cancelled.")
+            return []
+
+        # Open audio stream
+        stream = self.p.open(
+            format=FORMAT,
+            channels=CHANNELS,
+            rate=RATE,
+            input=True,
+            frames_per_buffer=CHUNK,
+            input_device_index=None
+        )
+
+        frames = []
+
+        while True:
+            try:
+                data = stream.read(CHUNK, exception_on_overflow=False)
+                current = self._get_state()
+
+                if current == self.STOPPED:
+                    break
+
+                int_data = array.array("h", data)
+                amplitude = max(abs(x) for x in int_data)
+
+                if current == self.RECORDING:
+                    frames.append(data)
+                    is_silent = amplitude < SILENCE_THRESHOLD
+                    print(f"Amplitude: {amplitude:5d}/{SILENCE_THRESHOLD} "
+                          f"{'[silent]' if is_silent else '[SPEECH]'} [RECORDING]", end="\r")
+                elif current == self.PAUSED:
+                    # Read from stream to prevent buffer overflow, but discard
+                    print(f"Amplitude: {amplitude:5d}/{SILENCE_THRESHOLD}             [PAUSED]  ", end="\r")
+
+            except Exception as e:
+                print(f"Error reading audio: {e}")
+                break
+
+        print("Done recording.                                          ")
+
+        stream.stop_stream()
+        stream.close()
+
+        return frames
+
+    def save_frames(self, frames, filename):
+        wf = wave.open(filename, "wb")
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(self.p.get_sample_size(FORMAT))
+        wf.setframerate(RATE)
+        wf.writeframes(b"".join(frames))
+        wf.close()
+
+    def cleanup(self):
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_term_settings)
+        self.p.terminate()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.cleanup()
+        return False
+
+
 class Transcriber:
     def __init__(self, service="groq"):
         self.service = service
@@ -143,8 +271,12 @@ def main():
                       default="groq", help="STT service to use")
     parser.add_argument("-d", "--duration", type=float, default=60,
                       help="Maximum recording duration in seconds (default: 60)")
-    parser.add_argument("-i", "--input", type=str,
+
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument("-i", "--input", type=str,
                       help="Process existing audio file instead of recording")
+    mode_group.add_argument("-r", "--record-interactive", action="store_true",
+                      help="Interactive recording mode with manual pause/resume (Enter to toggle, q to stop)")
     args = parser.parse_args()
 
     # FILE MODE: Process existing audio file
@@ -177,7 +309,26 @@ def main():
 
         return
 
-    # RECORDING MODE: Record from microphone
+    # INTERACTIVE RECORDING MODE
+    if args.record_interactive:
+        if args.duration != 60:
+            print("Note: --duration ignored in interactive mode")
+
+        with InteractiveRecorder() as recorder:
+            frames = recorder.record()
+
+            if not frames:
+                return
+
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            temp_audio_path = os.path.join(tempfile.gettempdir(), f"listen-in-{timestamp}.wav")
+            recorder.save_frames(frames, temp_audio_path)
+            print(f"Audio saved to {temp_audio_path}")
+            transcribe_and_copy(Path(temp_audio_path), args.language, args.service)
+
+        return
+
+    # SILENCE-BASED RECORDING MODE (default)
     with AudioRecorder() as recorder:
         frames = recorder.record_until_silence(max_duration=args.duration)
 
