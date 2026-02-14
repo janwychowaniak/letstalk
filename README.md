@@ -14,10 +14,11 @@ A simple Python toolkit for speech-to-text (STT) and text-to-speech (TTS) conver
   - Automatic text chunking for long inputs
 
 - **Speech-to-Text (listen.py)**
+  - Two recording modes: silence-based (automatic) or interactive (manual pause/resume)
   - Record from microphone or process existing audio files
   - Whisper transcription via Groq or OpenAI
-  - Voice activity detection with automatic silence-based stopping
   - Auto-copy transcription to clipboard
+  - Audio files preserved in `/tmp` for quality inspection
 
 ## Installation
 
@@ -85,36 +86,60 @@ pbpaste | python talk.py -v nova -p  # macOS clipboard
 
 ### Speech-to-Text (listen.py)
 
-Record from microphone:
+**Silence-based recording** (stops automatically after 2 seconds of silence):
 ```bash
-python listen.py -l en -s groq
+python listen.py -s groq
 ```
 
-Transcribe existing audio file:
+**Interactive recording** (manual pause/resume control):
 ```bash
-python listen.py -i recording.wav -l en -s groq
+python listen.py -r -s groq
+```
+
+In interactive mode:
+- Press **Enter** to start/pause/resume recording
+- Press **q** to stop and finalize recording
+- Great for longer dictation with thinking pauses
+
+**Transcribe existing audio file:**
+```bash
+python listen.py -i recording.wav -s groq
 ```
 
 **Options:**
-- `-i/--input FILE`: Process existing audio file instead of recording
-- `-l/--language CODE`: Language code (e.g., 'en', 'pl', default: en)
+- `-l/--language CODE`: Language code (e.g., 'en', 'pl'), auto-detected if not specified
 - `-s/--service SERVICE`: STT service (groq or whisper, default: groq)
-- `-d/--duration SECONDS`: Max recording duration (default: 60)
-- `-b/--backup`: Keep audio file after processing
+- `-d/--duration SECONDS`: Max recording duration in silence-based mode (default: 60)
+- `-r/--record-interactive`: Interactive mode with manual pause/resume (mutually exclusive with -i)
+- `-i/--input FILE`: Process existing audio file instead of recording (mutually exclusive with -r)
+
+**Note:** All recorded audio files are automatically saved to `/tmp/listen-in-TIMESTAMP.wav` for later inspection if transcription quality needs verification.
 
 ## Examples
 
-One-command workflow for quick voice notes:
+**Quick voice note with TTS playback:**
 ```bash
 python talk.py -t "Remember to buy milk" -p
 ```
 
-Transcribe a meeting recording:
+**Dictate a longer thought with pauses:**
+```bash
+python listen.py -r -s groq
+# Press Enter to start, Enter to pause/resume, q to finish
+```
+
+**Quick voice transcription (automatic silence detection):**
+```bash
+python listen.py -s groq
+# Speak, then wait 2 seconds - it stops automatically
+```
+
+**Transcribe existing meeting recording:**
 ```bash
 python listen.py -i meeting.wav -l en -s groq
 ```
 
-Generate high-quality audiobook narration:
+**Generate high-quality audiobook narration:**
 ```bash
 python talk.py -i chapter1.txt -o chapter1.mp3 -m tts-1-hd -v nova
 ```
