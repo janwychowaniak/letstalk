@@ -93,6 +93,13 @@ class AudioRecorder:
     def cleanup(self):
         self.p.terminate()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.cleanup()
+        return False
+
 
 class Transcriber:
     def __init__(self, service="groq"):
@@ -171,10 +178,7 @@ def main():
         return
 
     # RECORDING MODE: Record from microphone
-    recorder = AudioRecorder()
-    temp_audio_path = None
-
-    try:
+    with AudioRecorder() as recorder:
         frames = recorder.record_until_silence(max_duration=args.duration)
 
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -182,9 +186,6 @@ def main():
         recorder.save_frames(frames, temp_audio_path)
         print(f"Audio saved to {temp_audio_path}")
         transcribe_and_copy(Path(temp_audio_path), args.language, args.service)
-
-    finally:
-        recorder.cleanup()
 
 
 if __name__ == "__main__":
