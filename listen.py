@@ -18,6 +18,16 @@ import pyperclip
 
 # ____________________________________________________________________________________________
 
+# Audio recording parameters
+CHUNK = 1024  # Size of the audio chunk to process
+FORMAT = pyaudio.paInt16  # Changed from paFloat32 to standard PCM format
+CHANNELS = 1  # Number of audio channels (mono)
+RATE = 16000  # Changed to 16000
+SILENCE_THRESHOLD = 800  # Need to adjust for int16 values (-32768 to 32767)
+SILENCE_DURATION = 2.0  # Lower = more responsive to speech endings
+
+# ____________________________________________________________________________________________
+
 class SuppressStderr:
     """Context manager to suppress stderr output (used to silence ALSA/JACK warnings)."""
     def __enter__(self):
@@ -29,16 +39,6 @@ class SuppressStderr:
         os.dup2(self.save_fd, 2)
         os.close(self.null_fd)
         os.close(self.save_fd)
-
-# ____________________________________________________________________________________________
-
-# Audio recording parameters
-CHUNK = 1024  # Size of the audio chunk to process
-FORMAT = pyaudio.paInt16  # Changed from paFloat32 to standard PCM format
-CHANNELS = 1  # Number of audio channels (mono)
-RATE = 16000  # Changed to 16000
-SILENCE_THRESHOLD = 800  # Need to adjust for int16 values (-32768 to 32767)
-SILENCE_DURATION = 2.0  # Lower = more responsive to speech endings
 
 # ____________________________________________________________________________________________
 
@@ -212,7 +212,7 @@ class InteractiveRecorder:
                           f"{'[silent]' if is_silent else '[SPEECH]'} [RECORDING]", end="\r")
                 elif current == self.PAUSED:
                     # Read from stream to prevent buffer overflow, but discard
-                    print(f"Amplitude: {amplitude:5d}/{SILENCE_THRESHOLD}             [PAUSED]  ", end="\r")
+                    print(f"Amplitude: {amplitude:5d}/{SILENCE_THRESHOLD}             [paused]  ", end="\r")
 
             except Exception as e:
                 print(f"Error reading audio: {e}")
@@ -278,6 +278,8 @@ def transcribe_and_copy(audio_file_path: Path, language: str, service: str) -> N
     print(f"\nTranscribed text:\n{text}\n")
     pyperclip.copy(text.strip())
 
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def main():
     parser = argparse.ArgumentParser(description="Speech to Text Conversion")
