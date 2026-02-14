@@ -18,6 +18,20 @@ import pyperclip
 
 # ____________________________________________________________________________________________
 
+class SuppressStderr:
+    """Context manager to suppress stderr output (used to silence ALSA/JACK warnings)."""
+    def __enter__(self):
+        self.null_fd = os.open(os.devnull, os.O_RDWR)
+        self.save_fd = os.dup(2)
+        os.dup2(self.null_fd, 2)
+
+    def __exit__(self, *_):
+        os.dup2(self.save_fd, 2)
+        os.close(self.null_fd)
+        os.close(self.save_fd)
+
+# ____________________________________________________________________________________________
+
 # Audio recording parameters
 CHUNK = 1024  # Size of the audio chunk to process
 FORMAT = pyaudio.paInt16  # Changed from paFloat32 to standard PCM format
@@ -30,7 +44,8 @@ SILENCE_DURATION = 2.0  # Lower = more responsive to speech endings
 
 class AudioRecorder:
     def __init__(self):
-        self.p = pyaudio.PyAudio()
+        with SuppressStderr():
+            self.p = pyaudio.PyAudio()
 
     def record_until_silence(self, max_duration=None):
         stream = self.p.open(
@@ -114,7 +129,8 @@ class InteractiveRecorder:
     STOPPED = "STOPPED"
 
     def __init__(self):
-        self.p = pyaudio.PyAudio()
+        with SuppressStderr():
+            self.p = pyaudio.PyAudio()
         self.state = self.READY
         self.lock = threading.Lock()
         self.old_term_settings = termios.tcgetattr(sys.stdin)
