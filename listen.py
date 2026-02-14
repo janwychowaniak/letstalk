@@ -1,6 +1,7 @@
 import argparse
 import os
 from datetime import datetime
+from typing import Optional
 from pathlib import Path
 import tempfile
 import wave
@@ -101,7 +102,7 @@ class Transcriber:
         else:
             self.client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY_STT"))
 
-    def transcribe(self, audio_file: Path, language: str) -> str:
+    def transcribe(self, audio_file: Path, language: Optional[str]) -> str:
         if self.service == "groq":
             response = self.client.audio.transcriptions.create(
                 file=audio_file.open("rb"),
@@ -129,8 +130,8 @@ def transcribe_and_copy(audio_file_path: Path, language: str, service: str) -> N
 
 def main():
     parser = argparse.ArgumentParser(description="Speech to Text Conversion")
-    parser.add_argument("-l", "--language", type=str, default="en",
-                      help="Language code (e.g., 'en', 'pl')")
+    parser.add_argument("-l", "--language", type=str, default=None,
+                      help="Optional language code (e.g., 'en', 'pl'). Auto-detected if not specified")
     parser.add_argument("-s", "--service", type=str, choices=['groq', 'whisper'],
                       default="groq", help="STT service to use")
     parser.add_argument("-d", "--duration", type=float, default=60,

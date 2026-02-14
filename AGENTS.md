@@ -65,12 +65,12 @@ Available models: tts-1, tts-1-hd
 
 Record from microphone:
 ```bash
-python listen.py -l en -s groq
+python listen.py -s groq
 ```
 
 Process existing audio file:
 ```bash
-python listen.py -i recording.wav -l en -s groq
+python listen.py -i recording.wav -s groq
 ```
 
 Options:
