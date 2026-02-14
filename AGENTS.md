@@ -77,8 +77,9 @@ Options:
 - `-l/--language`: Language code (e.g., 'en', 'pl')
 - `-s/--service`: STT service (groq or whisper)
 - `-d/--duration`: Max recording duration in seconds (default: 60)
-- `-b/--backup`: Keep audio file after processing
 - `-i/--input`: Process existing audio file instead of recording
+
+Note: All recorded audio files are automatically preserved in `/tmp` for later inspection.
 
 ## 3. Architecture and Design
 
@@ -114,7 +115,7 @@ Options:
   - Same interface for both services
 
 - **Two modes**:
-  - Recording mode: Record → save temp WAV → transcribe → copy to clipboard → cleanup
+  - Recording mode: Record → save temp WAV → transcribe → copy to clipboard (audio file preserved)
   - File mode: Read existing WAV → transcribe → copy to clipboard
 
 ### 3.3. Key Design Decisions
@@ -128,6 +129,7 @@ Options:
 7. **Stdin input detection**: talk.py uses sys.stdin.isatty() to detect piped input, with manual validation for mutual exclusivity since argparse doesn't support stdin in mutually exclusive groups
 8. **Temp file preservation**: Play mode keeps generated audio in temp directory for later replay
 9. **cvlc integration**: Immediate playback mode checks for cvlc availability before processing
+10. **Audio file persistence**: listen.py always preserves recorded audio files in /tmp for debugging transcription quality
 
 ### 3.4. Important Constants
 

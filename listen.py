@@ -136,8 +136,6 @@ def main():
                       default="groq", help="STT service to use")
     parser.add_argument("-d", "--duration", type=float, default=60,
                       help="Maximum recording duration in seconds (default: 60)")
-    parser.add_argument("-b", "--backup", action="store_true",
-                      help="Keep the audio file after processing (for debugging)")
     parser.add_argument("-i", "--input", type=str,
                       help="Process existing audio file instead of recording")
     args = parser.parse_args()
@@ -150,8 +148,6 @@ def main():
         ignored_args = []
         if args.duration != 60:  # Non-default duration
             ignored_args.append("--duration")
-        if args.backup:
-            ignored_args.append("--backup")
 
         if ignored_args:
             print(f"Note: {', '.join(ignored_args)} ignored in file mode")
@@ -184,16 +180,11 @@ def main():
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         temp_audio_path = os.path.join(tempfile.gettempdir(), f"listen-in-{timestamp}.wav")
         recorder.save_frames(frames, temp_audio_path)
-
-        if args.backup:
-            print(f"Debug mode: Audio saved to {temp_audio_path}")
-        else:
-            transcribe_and_copy(Path(temp_audio_path), args.language, args.service)
+        print(f"Audio saved to {temp_audio_path}")
+        transcribe_and_copy(Path(temp_audio_path), args.language, args.service)
 
     finally:
         recorder.cleanup()
-        if temp_audio_path and os.path.exists(temp_audio_path) and not args.backup:
-            os.unlink(temp_audio_path)
 
 
 if __name__ == "__main__":
