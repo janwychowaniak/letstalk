@@ -128,12 +128,17 @@ class InteractiveRecorder:
     PAUSED = "PAUSED"
     STOPPED = "STOPPED"
 
-    def __init__(self):
+    def __init__(self, transcriber: "Transcriber", language: Optional[str]):
         with SuppressStderr():
             self.p = pyaudio.PyAudio()
         self.state = self.READY
         self.lock = threading.Lock()
         self.old_term_settings = termios.tcgetattr(sys.stdin)
+        self.transcriber = transcriber
+        self.language = language
+        self.text_segments = []
+        self.session_timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        self.segment_counter = 0
 
     def _set_state(self, new_state: str) -> None:
         with self.lock:
@@ -142,6 +147,35 @@ class InteractiveRecorder:
     def _get_state(self) -> str:
         with self.lock:
             return self.state
+
+    def _process_segment(self, frames: list) -> Optional[str]:
+        """Process a recorded segment: save to WAV, transcribe, return text."""
+        if not frames:
+            return None
+
+        self.segment_counter += 1
+        segment_filename = os.path.join(
+            tempfile.gettempdir(),
+            f"listen-seg-{self.session_timestamp}-{self.segment_counter:03d}.wav"
+        )
+
+        # Save frames to WAV
+        wf = wave.open(segment_filename, "wb")
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(self.p.get_sample_size(FORMAT))
+        wf.setframerate(RATE)
+        wf.writeframes(b"".join(frames))
+        wf.close()
+
+        # Transcribe
+        print("\r[transcribing]" + " " * 60, end="", flush=True)
+        try:
+            text = self.transcriber.transcribe(Path(segment_filename), self.language)
+            # Strip whitespace to avoid double spaces when joining
+            return text.strip()
+        except Exception as e:
+            print(f"\rTranscription error: {e}" + " " * 40)
+            return None
 
     def _listen_for_keys(self) -> None:
         """Background thread: listen for keypresses to control recording state."""
@@ -166,9 +200,9 @@ class InteractiveRecorder:
         except Exception:
             self._set_state(self.STOPPED)
 
-    def record(self) -> list:
-        """Record audio with interactive pause/resume control. Returns list of audio frames."""
-        print("Interactive mode: Press Enter to start recording, q to quit")
+    def record(self) -> str:
+        """Record audio with interactive pause/resume control. Returns transcribed text."""
+        print("Interactive mode: Press Enter to start recording, q to quit\n")
 
         # Start keypress listener thread
         key_thread = threading.Thread(target=self._listen_for_keys, daemon=True)
@@ -180,7 +214,7 @@ class InteractiveRecorder:
 
         if self._get_state() == self.STOPPED:
             print("Recording cancelled.")
-            return []
+            return ""
 
         # Open audio stream
         stream = self.p.open(
@@ -192,46 +226,61 @@ class InteractiveRecorder:
             input_device_index=None
         )
 
-        frames = []
+        current_segment_frames = []
+        prev_state = self.RECORDING
 
         while True:
             try:
                 data = stream.read(CHUNK, exception_on_overflow=False)
                 current = self._get_state()
 
+                # Detect state transitions
+                if prev_state == self.RECORDING and current == self.PAUSED:
+                    # Transition: RECORDING -> PAUSED, process the segment
+                    text = self._process_segment(current_segment_frames)
+                    if text:
+                        self.text_segments.append(text)
+                        # Clear the "transcribing" line and print the text on same line
+                        print(f"\r> {text}" + " " * 20)
+                    current_segment_frames = []
+
                 if current == self.STOPPED:
+                    # Stopped, process final segment if we were recording
+                    if prev_state == self.RECORDING and current_segment_frames:
+                        text = self._process_segment(current_segment_frames)
+                        if text:
+                            self.text_segments.append(text)
+                            # Clear the "transcribing" line and print the text on same line
+                            print(f"\r> {text}" + " " * 20)
+                    else:
+                        # Clear any remaining meter line
+                        print("\r" + " " * 80, end="")
                     break
 
                 int_data = array.array("h", data)
                 amplitude = max(abs(x) for x in int_data)
 
                 if current == self.RECORDING:
-                    frames.append(data)
+                    current_segment_frames.append(data)
                     is_silent = amplitude < SILENCE_THRESHOLD
-                    print(f"Amplitude: {amplitude:5d}/{SILENCE_THRESHOLD} "
-                          f"{'[silent]' if is_silent else '[SPEECH]'} [RECORDING]", end="\r")
+                    print(f"\rAmplitude: {amplitude:5d}/{SILENCE_THRESHOLD} "
+                          f"{'[silent]' if is_silent else '[SPEECH]'} [RECORDING]", end="")
                 elif current == self.PAUSED:
                     # Read from stream to prevent buffer overflow, but discard
-                    print(f"Amplitude: {amplitude:5d}/{SILENCE_THRESHOLD}             [paused]  ", end="\r")
+                    print(f"\rAmplitude: {amplitude:5d}/{SILENCE_THRESHOLD}             [PAUSED]  ", end="")
+
+                prev_state = current
 
             except Exception as e:
-                print(f"Error reading audio: {e}")
+                print(f"\rError reading audio: {e}")
                 break
 
-        print("Done recording.                                          ")
+        print("\nDone recording.                                          ")
 
         stream.stop_stream()
         stream.close()
 
-        return frames
-
-    def save_frames(self, frames, filename):
-        wf = wave.open(filename, "wb")
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(self.p.get_sample_size(FORMAT))
-        wf.setframerate(RATE)
-        wf.writeframes(b"".join(frames))
-        wf.close()
+        return " ".join(self.text_segments)
 
     def cleanup(self):
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_term_settings)
@@ -337,17 +386,14 @@ def main():
         if args.duration != 60:
             print("Note: --duration ignored in interactive mode")
 
-        with InteractiveRecorder() as recorder:
-            frames = recorder.record()
+        transcriber = Transcriber(service=args.service)
+        with InteractiveRecorder(transcriber=transcriber, language=args.language) as recorder:
+            text = recorder.record()
 
-            if not frames:
+            if not text:
                 return
 
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            temp_audio_path = os.path.join(tempfile.gettempdir(), f"listen-in-{timestamp}.wav")
-            recorder.save_frames(frames, temp_audio_path)
-            print(f"Audio saved to {temp_audio_path}")
-            text = transcribe_audio(Path(temp_audio_path), args.language, args.service)
+            print(f"\nFull transcription:\n{text}\n")
             copy_to_clipboard(text)
 
         return
