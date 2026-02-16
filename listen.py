@@ -270,12 +270,16 @@ class Transcriber:
 
 # ____________________________________________________________________________________________
 
-def transcribe_and_copy(audio_file_path: Path, language: str, service: str) -> None:
-    """Transcribe audio file and copy result to clipboard"""
+def transcribe_audio(audio_file_path: Path, language: str, service: str) -> str:
+    """Transcribe audio file and return the text"""
     transcriber = Transcriber(service=service)
     text = transcriber.transcribe(audio_file_path, language)
-
     print(f"\nTranscribed text:\n{text}\n")
+    return text
+
+
+def copy_to_clipboard(text: str) -> None:
+    """Copy text to clipboard"""
     pyperclip.copy(text.strip())
 
 
@@ -321,7 +325,8 @@ def main():
         print(f"File mode: processing {input_path.name}...")
 
         try:
-            transcribe_and_copy(input_path, args.language, args.service)
+            text = transcribe_audio(input_path, args.language, args.service)
+            copy_to_clipboard(text)
         except Exception as e:
             print(f"Error processing file: {e}")
 
@@ -342,7 +347,8 @@ def main():
             temp_audio_path = os.path.join(tempfile.gettempdir(), f"listen-in-{timestamp}.wav")
             recorder.save_frames(frames, temp_audio_path)
             print(f"Audio saved to {temp_audio_path}")
-            transcribe_and_copy(Path(temp_audio_path), args.language, args.service)
+            text = transcribe_audio(Path(temp_audio_path), args.language, args.service)
+            copy_to_clipboard(text)
 
         return
 
@@ -354,7 +360,8 @@ def main():
         temp_audio_path = os.path.join(tempfile.gettempdir(), f"listen-in-{timestamp}.wav")
         recorder.save_frames(frames, temp_audio_path)
         print(f"Audio saved to {temp_audio_path}")
-        transcribe_and_copy(Path(temp_audio_path), args.language, args.service)
+        text = transcribe_audio(Path(temp_audio_path), args.language, args.service)
+        copy_to_clipboard(text)
 
 
 if __name__ == "__main__":
