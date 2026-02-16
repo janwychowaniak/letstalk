@@ -1,8 +1,10 @@
 # TODO
 
-## listen.py - Interactive Mode Punctuation Improvements
+## listen.py - Interactive Mode Punctuation and Capitalization Improvements
 
-**Issue**: When using interactive recording mode (`-r`) with frequent pause/unpause cycles, Whisper transcription sometimes loses punctuation quality. The audio recordings sound fine, but the abrupt concatenation at pause boundaries may confuse the model.
+**Issue**: When using interactive recording mode (`-r`) with frequent pause/unpause cycles, Whisper transcription sometimes loses punctuation and capitalization quality. The audio recordings sound fine, but the abrupt transitions at pause boundaries may confuse the model, leading to:
+- Missing or incorrect punctuation (periods, commas, question marks)
+- Improper capitalization (mid-sentence capitals, missing sentence-start capitals)
 
 **Potential solutions** (if punctuation quirks become annoying enough):
 
@@ -23,6 +25,6 @@
    - More complex than current approach but cleaner audio
    - Would need to adjust amplitude detection logic
 
-**Current status**: Using naive concatenation for simplicity. Audio files are preserved in `/tmp` for inspection if needed.
+**Current status**: Using segment-based transcription with immediate processing on pause. Per-segment audio files are preserved in `/tmp` for inspection if needed. Testing out this implementation in practice, in order to gather experience on how it works.
 
-**Priority**: Low (only implement if punctuation issues become frequent/annoying)
+**Priority**: Low (only implement if punctuation/capitalization issues become frequent/annoying)
