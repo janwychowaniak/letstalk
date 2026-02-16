@@ -90,7 +90,11 @@ Options:
 - Press **Enter** to pause/unpause recording (toggles between RECORDING and PAUSED)
 - Press **q** to stop and finalize recording (from any state)
 
-Note: All recorded audio files are automatically preserved in `/tmp` for later inspection.
+**Interactive mode behavior:**
+- Each pause triggers immediate transcription of the recorded segment
+- Transcribed text appears incrementally on screen (prefixed with '> ')
+- Final transcription (all segments joined) is copied to clipboard when recording stops
+- Per-segment audio files are preserved in `/tmp` as listen-seg-YYYYMMDD-HHMMSS-NNN.wav
 
 ## 3. Architecture and Design
 
@@ -121,13 +125,18 @@ Note: All recorded audio files are automatically preserved in `/tmp` for later i
   - Configurable SILENCE_THRESHOLD (800) and max duration
   - Context manager: automatic PyAudio cleanup
 
-- **InteractiveRecorder class**: Manual pause/resume recording
+- **InteractiveRecorder class**: Manual pause/resume recording with incremental transcription
   - Same audio format as AudioRecorder (mono, 16kHz, int16 PCM)
   - State machine: READY → RECORDING ↔ PAUSED → STOPPED
   - Background daemon thread listens for keypresses using tty/termios cbreak mode
   - Thread-safe state management via threading.Lock
   - Audio stream stays open during pauses (reads but discards frames to prevent buffer overflow)
-  - Naive concatenation: no silence trimming at pause boundaries
+  - **Incremental transcription**: Each pause triggers immediate STT transcription of the segment
+    - Segments transcribed independently as they're recorded (not concatenated)
+    - Per-segment WAV files saved as listen-seg-YYYYMMDD-HHMMSS-NNN.wav in /tmp
+    - Transcribed text displayed incrementally on screen (prefixed with '> ')
+    - Final transcription (joined segments) copied to clipboard when recording stops
+    - Synchronous transcription with '[transcribing]' indicator during processing
   - Shows amplitude meter + state indicator: [RECORDING] / [PAUSED]
   - Context manager: restores terminal settings and cleans up PyAudio
 
@@ -138,7 +147,7 @@ Note: All recorded audio files are automatically preserved in `/tmp` for later i
 
 - **Three modes**:
   - Silence-based recording mode: Record → save temp WAV → transcribe → copy to clipboard (audio file preserved)
-  - Interactive recording mode: Record with manual pause/resume → save temp WAV → transcribe → copy to clipboard (audio file preserved)
+  - Interactive recording mode: Record with manual pause/resume → transcribe each segment incrementally → join and copy full text to clipboard (segment audio files preserved)
   - File mode: Read existing WAV → transcribe → copy to clipboard
 
 ### 3.3. Key Design Decisions
@@ -154,6 +163,7 @@ Note: All recorded audio files are automatically preserved in `/tmp` for later i
 9. **cvlc integration**: Immediate playback mode checks for cvlc availability before processing
 10. **Audio file persistence**: listen.py always preserves recorded audio files in /tmp for debugging transcription quality
 11. **Interactive recording**: Uses tty/termios for non-blocking keypress detection with background thread, state machine ensures clean transitions
+12. **Incremental transcription**: Interactive mode transcribes each segment immediately on pause, providing real-time feedback and reducing post-recording editing needs
 
 ### 3.4. Important Constants
 
@@ -278,6 +288,8 @@ import pyaudio
 - **Mutually Exclusive Modes**: Use argparse groups to enforce exclusive options (e.g., `-i` vs `-t`, `-o` vs `-p`).
 
 - **Stdin Input Detection**: See `main()` in `talk.py` for implicit stdin pipe detection using `sys.stdin.isatty()`. Manual validation ensures mutual exclusivity with `-i` and `-t` flags.
+
+- **Incremental Transcription**: See `InteractiveRecorder._process_segment()` and `InteractiveRecorder.record()` in `listen.py` for segment-based recording with immediate transcription on state transitions (RECORDING → PAUSED, RECORDING → STOPPED).
 
 ### 4.4. Architecture Constraints
 
