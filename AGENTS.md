@@ -14,9 +14,20 @@ Both scripts are designed as standalone command-line tools with no shared module
 
 ### 2.1. Dependencies
 
-Install dependencies with:
+Scripts now support **uv** for automatic dependency management via Python script metadata (PEP 723). Both installation methods work:
+
+**Option 1: Using `uv` (Recommended)**
+```bash
+./talk.py -t "Hello world" -p
+./listen.py -s groq
+```
+Dependencies are automatically managed via the script metadata block.
+
+**Option 2: Traditional pip**
 ```bash
 pip install -r requirements.txt
+python talk.py -t "Hello world" -p
+python listen.py -s groq
 ```
 
 Required packages: pyaudio, openai, groq, pyperclip
@@ -34,18 +45,21 @@ The scripts require API keys configured as environment variables:
 
 Command-line text input with immediate playback (requires cvlc):
 ```bash
-python talk.py -t "Hello world" -p
+./talk.py -t "Hello world" -p      # with uv
+python talk.py -t "Hello world" -p # with pip
 ```
 
 File-based input with playback:
 ```bash
-python talk.py -i input.txt -p
+./talk.py -i input.txt -p      # with uv
+python talk.py -i input.txt -p # with pip
 ```
 
 Pipe text via stdin with playback:
 ```bash
-echo "Hello world" | python talk.py -p
-cat article.txt | python talk.py -p
+echo "Hello world" | ./talk.py -p      # with uv
+echo "Hello world" | python talk.py -p # with pip
+cat article.txt | ./talk.py -p
 ```
 
 Without -p, audio is saved to temp file and playback command is printed.
@@ -65,17 +79,20 @@ Available models: tts-1, tts-1-hd
 
 **Silence-based recording** (default):
 ```bash
-python listen.py -s groq
+./listen.py -s groq      # with uv
+python listen.py -s groq # with pip
 ```
 
 **Interactive recording** with manual pause/resume:
 ```bash
-python listen.py -r -s groq
+./listen.py -r -s groq      # with uv
+python listen.py -r -s groq # with pip
 ```
 
 **Process existing audio file**:
 ```bash
-python listen.py -i recording.wav -s groq
+./listen.py -i recording.wav -s groq      # with uv
+python listen.py -i recording.wav -s groq # with pip
 ```
 
 Options:

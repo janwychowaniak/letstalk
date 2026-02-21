@@ -22,19 +22,40 @@ A simple Python toolkit for speech-to-text (STT) and text-to-speech (TTS) conver
 
 ## Installation
 
+### Option 1: Using `uv` (Recommended)
+
+If you have [uv](https://docs.astral.sh/uv/) installed, the scripts run directly with automatic dependency management:
+
+```bash
+./talk.py -t "Hello world" -p
+./listen.py -s groq
+```
+
+### Option 2: Traditional Setup
+
 1. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Set up API keys as environment variables:
+2. Run scripts with Python:
+```bash
+python talk.py -t "Hello world" -p
+python listen.py -s groq
+```
+
+### API Keys Configuration
+
+Set up API keys as environment variables:
 ```bash
 export OPENAI_API_KEY_TTS="your-openai-api-key"
 export OPENAI_API_KEY_STT="your-openai-api-key"
 export GROQ_API_KEY_STT="your-groq-api-key"
 ```
 
-3. (Optional) For immediate audio playback, install VLC:
+### Optional: Install VLC for Playback
+
+For immediate audio playback with `-p` flag:
 ```bash
 # Ubuntu/Debian
 sudo apt install vlc
@@ -45,33 +66,40 @@ brew install --cask vlc
 
 ## Usage
 
+Scripts can be run either with `uv` (if installed) or via `python`. All examples below show both options:
+
 ### Text-to-Speech (talk.py)
 
 Quick command-line TTS with immediate playback:
 ```bash
-python talk.py -t "Hello world" -p
+./talk.py -t "Hello world" -p      # with uv
+python talk.py -t "Hello world" -p # with pip
 ```
 
 Convert file to audio:
 ```bash
-python talk.py -i input.txt -o output.mp3
+./talk.py -i input.txt -o output.mp3      # with uv
+python talk.py -i input.txt -o output.mp3 # with pip
 ```
 
 Use different voice and quality:
 ```bash
-python talk.py -t "Testing nova voice" -v nova -m tts-1-hd -p
+./talk.py -t "Testing nova voice" -v nova -m tts-1-hd -p      # with uv
+python talk.py -t "Testing nova voice" -v nova -m tts-1-hd -p # with pip
 ```
 
 Default behavior (reads `in.txt`, saves `out.mp3`):
 ```bash
-python talk.py
+./talk.py      # with uv
+python talk.py # with pip
 ```
 
 Pipe text via stdin:
 ```bash
-echo "Hello world" | python talk.py -p
-cat article.txt | python talk.py -o article.mp3
-pbpaste | python talk.py -v nova -p  # macOS clipboard
+echo "Hello world" | ./talk.py -p              # with uv
+echo "Hello world" | python talk.py -p         # with pip
+cat article.txt | ./talk.py -o article.mp3
+pbpaste | ./talk.py -v nova -p  # macOS clipboard
 ```
 
 **Note:** Only one input method can be used at a time: `-i`, `-t`, or piped stdin.
@@ -88,12 +116,14 @@ pbpaste | python talk.py -v nova -p  # macOS clipboard
 
 **Silence-based recording** (stops automatically after 2 seconds of silence):
 ```bash
-python listen.py -s groq
+./listen.py -s groq      # with uv
+python listen.py -s groq # with pip
 ```
 
 **Interactive recording** (manual pause/resume control):
 ```bash
-python listen.py -r -s groq
+./listen.py -r -s groq      # with uv
+python listen.py -r -s groq # with pip
 ```
 
 In interactive mode:
@@ -103,7 +133,8 @@ In interactive mode:
 
 **Transcribe existing audio file:**
 ```bash
-python listen.py -i recording.wav -s groq
+./listen.py -i recording.wav -s groq      # with uv
+python listen.py -i recording.wav -s groq # with pip
 ```
 
 **Options:**
