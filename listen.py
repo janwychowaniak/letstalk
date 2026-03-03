@@ -35,8 +35,7 @@ CHUNK = 1024  # Size of the audio chunk to process
 FORMAT = pyaudio.paInt16  # Changed from paFloat32 to standard PCM format
 CHANNELS = 1  # Number of audio channels (mono)
 RATE = 16000  # Changed to 16000
-SILENCE_THRESHOLD = 800  # Need to adjust for int16 values (-32768 to 32767)
-SILENCE_DURATION = 2.0  # Lower = more responsive to speech endings
+SILENCE_THRESHOLD = 800  # Amplitude threshold for speech detection display
 
 # ____________________________________________________________________________________________
 
@@ -53,84 +52,6 @@ class SuppressStderr:
         os.close(self.save_fd)
 
 # ____________________________________________________________________________________________
-
-class AudioRecorder:
-    def __init__(self):
-        with SuppressStderr():
-            self.p = pyaudio.PyAudio()
-
-    def record_until_silence(self, max_duration=None):
-        stream = self.p.open(
-            format=FORMAT,
-            channels=CHANNELS,
-            rate=RATE,
-            input=True,
-            frames_per_buffer=CHUNK,
-            input_device_index=None
-        )
-
-        print("Listening... (speak to begin)")
-
-        frames = []
-        silent_chunks = 0
-        has_speech = False
-        total_chunks = 0
-        max_chunks = float("inf") if max_duration is None else int(max_duration * RATE / CHUNK)
-
-        while True:
-            try:
-                data = stream.read(CHUNK, exception_on_overflow=False)
-                frames.append(data)
-                total_chunks += 1
-
-                int_data = array.array("h", data)
-                amplitude = max(abs(x) for x in int_data)
-                is_silent = amplitude < SILENCE_THRESHOLD
-
-                print(f"Amplitude: {amplitude:5d}/{SILENCE_THRESHOLD} {'[silent]' if is_silent else '[SPEECH]'}", end='\r')
-
-                if is_silent:
-                    silent_chunks += 1
-                else:
-                    silent_chunks = 0
-                    has_speech = True
-
-                # Stop if either:
-                # 1. We've had enough silence after speech
-                # 2. We've reached the maximum duration
-                if (has_speech and silent_chunks > int(SILENCE_DURATION * RATE / CHUNK)) or \
-                   total_chunks >= max_chunks:
-                    break
-
-            except Exception as e:
-                print(f"Error reading audio: {e}")
-                break
-
-        print("Done recording.               ")
-
-        stream.stop_stream()
-        stream.close()
-
-        return frames
-
-    def save_frames(self, frames, filename):
-        wf = wave.open(filename, "wb")
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(self.p.get_sample_size(FORMAT))
-        wf.setframerate(RATE)
-        wf.writeframes(b"".join(frames))
-        wf.close()
-
-    def cleanup(self):
-        self.p.terminate()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.cleanup()
-        return False
-
 
 class InteractiveRecorder:
     """Interactive recorder with manual pause/resume control via keypresses."""
@@ -341,34 +262,18 @@ def main():
                       help="Optional language code (e.g., 'en', 'pl'). Auto-detected if not specified")
     parser.add_argument("-s", "--service", type=str, choices=['groq', 'whisper'],
                       default="groq", help="STT service to use")
-    parser.add_argument("-d", "--duration", type=float, default=60,
-                      help="Maximum recording duration in seconds (default: 60)")
-
-    mode_group = parser.add_mutually_exclusive_group()
-    mode_group.add_argument("-i", "--input", type=str,
+    parser.add_argument("-i", "--input", type=str,
                       help="Process existing audio file instead of recording")
-    mode_group.add_argument("-r", "--record-interactive", action="store_true",
-                      help="Interactive recording mode with manual pause/resume (Enter to toggle, q to stop)")
     args = parser.parse_args()
 
     # FILE MODE: Process existing audio file
     if args.input:
         input_path = Path(args.input)
 
-        # Warn about ignored arguments
-        ignored_args = []
-        if args.duration != 60:  # Non-default duration
-            ignored_args.append("--duration")
-
-        if ignored_args:
-            print(f"Note: {', '.join(ignored_args)} ignored in file mode")
-
-        # Validate file existence
         if not input_path.exists():
             print(f"Error: File '{args.input}' not found")
             return
 
-        # Basic WAV format check
         if input_path.suffix.lower() != ".wav":
             print(f"Warning: File '{args.input}' is not a .wav file, transcription may fail")
 
@@ -382,32 +287,15 @@ def main():
 
         return
 
-    # INTERACTIVE RECORDING MODE
-    if args.record_interactive:
-        if args.duration != 60:
-            print("Note: --duration ignored in interactive mode")
+    # INTERACTIVE RECORDING MODE (default)
+    transcriber = Transcriber(service=args.service)
+    with InteractiveRecorder(transcriber=transcriber, language=args.language) as recorder:
+        text = recorder.record()
 
-        transcriber = Transcriber(service=args.service)
-        with InteractiveRecorder(transcriber=transcriber, language=args.language) as recorder:
-            text = recorder.record()
+        if not text:
+            return
 
-            if not text:
-                return
-
-            print(f"\nFull transcription:\n{text}\n")
-            copy_to_clipboard(text)
-
-        return
-
-    # SILENCE-BASED RECORDING MODE (default)
-    with AudioRecorder() as recorder:
-        frames = recorder.record_until_silence(max_duration=args.duration)
-
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        temp_audio_path = os.path.join(tempfile.gettempdir(), f"listen-in-{timestamp}.wav")
-        recorder.save_frames(frames, temp_audio_path)
-        print(f"Audio saved to {temp_audio_path}")
-        text = transcribe_audio(Path(temp_audio_path), args.language, args.service)
+        print(f"\nFull transcription:\n{text}\n")
         copy_to_clipboard(text)
 
 
