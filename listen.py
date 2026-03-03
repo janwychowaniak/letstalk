@@ -135,7 +135,6 @@ class AudioRecorder:
 class InteractiveRecorder:
     """Interactive recorder with manual pause/resume control via keypresses."""
 
-    READY = "READY"
     RECORDING = "RECORDING"
     PAUSED = "PAUSED"
     STOPPED = "STOPPED"
@@ -143,7 +142,7 @@ class InteractiveRecorder:
     def __init__(self, transcriber: "Transcriber", language: Optional[str]):
         with SuppressStderr():
             self.p = pyaudio.PyAudio()
-        self.state = self.READY
+        self.state = self.RECORDING
         self.lock = threading.Lock()
         self.old_term_settings = termios.tcgetattr(sys.stdin)
         self.transcriber = transcriber
@@ -198,9 +197,7 @@ class InteractiveRecorder:
                 current = self._get_state()
 
                 if ch == "\n" or ch == "\r":
-                    if current == self.READY:
-                        self._set_state(self.RECORDING)
-                    elif current == self.RECORDING:
+                    if current == self.RECORDING:
                         self._set_state(self.PAUSED)
                     elif current == self.PAUSED:
                         self._set_state(self.RECORDING)
@@ -214,19 +211,11 @@ class InteractiveRecorder:
 
     def record(self) -> str:
         """Record audio with interactive pause/resume control. Returns transcribed text."""
-        print("Interactive mode: Press Enter to start recording, q to quit\n")
+        print("Interactive mode: recording started. Enter to pause/resume, q to stop\n")
 
         # Start keypress listener thread
         key_thread = threading.Thread(target=self._listen_for_keys, daemon=True)
         key_thread.start()
-
-        # Wait for user to press Enter or q
-        while self._get_state() == self.READY:
-            pass
-
-        if self._get_state() == self.STOPPED:
-            print("Recording cancelled.")
-            return ""
 
         # Open audio stream
         stream = self.p.open(
