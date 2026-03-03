@@ -77,16 +77,10 @@ Available models: tts-1, tts-1-hd
 
 #### Speech-to-Text (listen.py)
 
-**Silence-based recording** (default):
+**Recording** (default — starts immediately):
 ```bash
 ./listen.py -s groq      # with uv
 python listen.py -s groq # with pip
-```
-
-**Interactive recording** with manual pause/resume:
-```bash
-./listen.py -r -s groq      # with uv
-python listen.py -r -s groq # with pip
 ```
 
 **Process existing audio file**:
@@ -98,16 +92,14 @@ python listen.py -i recording.wav -s groq # with pip
 Options:
 - `-l/--language`: Language code (e.g., 'en', 'pl')
 - `-s/--service`: STT service (groq or whisper)
-- `-d/--duration`: Max recording duration in seconds (default: 60, ignored in interactive mode)
-- `-r/--record-interactive`: Interactive recording mode with manual pause/resume controls (mutually exclusive with -i)
-- `-i/--input`: Process existing audio file instead of recording (mutually exclusive with -r)
+- `-i/--input`: Process existing audio file instead of recording
 
-**Interactive mode controls:**
-- Press **Enter** to start recording (from READY state)
+**Recording controls:**
 - Press **Enter** to pause/unpause recording (toggles between RECORDING and PAUSED)
 - Press **q** to stop and finalize recording (from any state)
 
-**Interactive mode behavior:**
+**Recording behavior:**
+- Recording starts immediately upon launch
 - Each pause triggers immediate transcription of the recorded segment
 - Transcribed text appears incrementally on screen (prefixed with '> ')
 - Final transcription (all segments joined) is copied to clipboard when recording stops
@@ -135,16 +127,9 @@ Options:
 
 ### 3.2. listen.py Architecture
 
-- **AudioRecorder class**: Silence-based recording (default mode)
-  - Records in mono, 16kHz, 16-bit PCM format
-  - Uses amplitude-based voice activity detection
-  - Stops after SILENCE_DURATION seconds of silence (2.0s)
-  - Configurable SILENCE_THRESHOLD (800) and max duration
-  - Context manager: automatic PyAudio cleanup
-
 - **InteractiveRecorder class**: Manual pause/resume recording with incremental transcription
-  - Same audio format as AudioRecorder (mono, 16kHz, int16 PCM)
-  - State machine: READY → RECORDING ↔ PAUSED → STOPPED
+  - Records in mono, 16kHz, 16-bit PCM format
+  - State machine: RECORDING ↔ PAUSED → STOPPED (starts recording immediately)
   - Background daemon thread listens for keypresses using tty/termios cbreak mode
   - Thread-safe state management via threading.Lock
   - Audio stream stays open during pauses (reads but discards frames to prevent buffer overflow)
@@ -162,9 +147,8 @@ Options:
   - OpenAI: whisper-1 model
   - Same interface for both services
 
-- **Three modes**:
-  - Silence-based recording mode: Record → save temp WAV → transcribe → copy to clipboard (audio file preserved)
-  - Interactive recording mode: Record with manual pause/resume → transcribe each segment incrementally → join and copy full text to clipboard (segment audio files preserved)
+- **Two modes**:
+  - Recording mode (default): Record with manual pause/resume → transcribe each segment incrementally → join and copy full text to clipboard (segment audio files preserved)
   - File mode: Read existing WAV → transcribe → copy to clipboard
 
 ### 3.3. Key Design Decisions
@@ -179,8 +163,8 @@ Options:
 8. **Temp file preservation**: Play mode keeps generated audio in temp directory for later replay
 9. **cvlc integration**: Immediate playback mode checks for cvlc availability before processing
 10. **Audio file persistence**: listen.py always preserves recorded audio files in /tmp for debugging transcription quality
-11. **Interactive recording**: Uses tty/termios for non-blocking keypress detection with background thread, state machine ensures clean transitions
-12. **Incremental transcription**: Interactive mode transcribes each segment immediately on pause, providing real-time feedback and reducing post-recording editing needs
+11. **Interactive recording**: Uses tty/termios for non-blocking keypress detection with background thread, state machine ensures clean transitions. Recording starts immediately on launch.
+12. **Incremental transcription**: Each segment is transcribed immediately on pause, providing real-time feedback and reducing post-recording editing needs
 
 ### 3.4. Important Constants
 
@@ -190,8 +174,7 @@ Options:
 **listen.py:**
 - `CHUNK = 1024`: Audio buffer size in frames
 - `RATE = 16000`: Sample rate in Hz
-- `SILENCE_THRESHOLD = 800`: Amplitude threshold for voice detection (range: -32768 to 32767)
-- `SILENCE_DURATION = 2.0`: Seconds of silence before stopping recording
+- `SILENCE_THRESHOLD = 800`: Amplitude threshold for speech detection display (range: -32768 to 32767)
 
 ## 4. Development Guidelines
 
@@ -244,8 +227,8 @@ import pyaudio
 - No need for type hints on simple variables or `__init__` methods without complex logic
 
 #### Naming Conventions
-- **Classes**: PascalCase (e.g., `AudioRecorder`, `Speaker`)
-- **Functions/methods**: snake_case (e.g., `record_until_silence`, `save_frames`)
+- **Classes**: PascalCase (e.g., `InteractiveRecorder`, `Speaker`)
+- **Functions/methods**: snake_case (e.g., `record`, `save_frames`)
 - **Constants**: UPPER_SNAKE_CASE (e.g., `MAX_CHARS`, `SILENCE_THRESHOLD`)
 - **Variables**: snake_case (e.g., `audio_data`, `temp_file`)
 - **Private methods**: Prefix with underscore if truly internal (rare in this codebase)
@@ -255,7 +238,7 @@ import pyaudio
 - Document non-obvious behavior (e.g., chunking strategy, silence detection)
 - Inline comments should be brief and focused
 - Add comments for important constants explaining their purpose and units
-- Example: `SILENCE_DURATION = 2.0  # Seconds of silence before stopping recording`
+- Example: `SILENCE_THRESHOLD = 800  # Amplitude threshold for speech detection display`
 
 #### Error Handling
 - Use try-except blocks for file I/O, API calls, and external process execution
@@ -299,8 +282,6 @@ import pyaudio
 
 - **Chunking Long Text**: See `Speaker.speak()` for sentence-aware chunking that tries delimiters in order: `.`, `!`, `?`, `
 `, space.
-
-- **Voice Activity Detection**: See `AudioRecorder.record_until_silence()` for amplitude-based silence detection using a rolling silence counter.
 
 - **Mutually Exclusive Modes**: Use argparse groups to enforce exclusive options (e.g., `-i` vs `-t`, `-o` vs `-p`).
 
