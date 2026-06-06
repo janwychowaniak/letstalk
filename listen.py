@@ -11,20 +11,24 @@
 
 
 import argparse
+import array
+import base64
+import json
 import os
 import sys
-import tty
+import tempfile
 import termios
 import threading
-from datetime import datetime
-from typing import Optional
-from pathlib import Path
-import tempfile
+import tty
+import urllib.error
+import urllib.request
 import wave
-import array
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
 
-import openai
 import groq
+import openai
 import pyaudio
 import pyperclip
 
@@ -36,6 +40,18 @@ FORMAT = pyaudio.paInt16  # Changed from paFloat32 to standard PCM format
 CHANNELS = 1  # Number of audio channels (mono)
 RATE = 16000  # Changed to 16000
 SILENCE_THRESHOLD = 800  # Amplitude threshold for speech detection display
+OPENROUTER_STT_URL = "https://openrouter.ai/api/v1/audio/transcriptions"
+GROQ_STT_MODEL = "whisper-large-v3"
+OPENAI_STT_MODEL = "whisper-1"
+OPENROUTER_STT_MODEL = "openai/whisper-large-v3-turbo"
+SUPPORTED_AUDIO_FORMATS = {"wav", "mp3", "mp4", "webm", "flac", "ogg", "m4a", "aac"}
+
+
+def get_required_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
 
 # ____________________________________________________________________________________________
 
@@ -220,28 +236,75 @@ class Transcriber:
     def __init__(self, service="groq"):
         self.service = service
         if service == "groq":
-            self.client = groq.Groq(api_key=os.getenv("GROQ_API_KEY_STT"))
+            self.client = groq.Groq(api_key=get_required_env("GROQ_API_KEY_STT"))
+        elif service == "openai":
+            self.client = openai.OpenAI(api_key=get_required_env("OPENAI_API_KEY_STT"))
+        elif service == "openrouter":
+            self.api_key = get_required_env("OPENROUTER_API_KEY_STT_TTS")
         else:
-            self.client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY_STT"))
+            raise ValueError(f"Unsupported STT service: {service}")
 
     def transcribe(self, audio_file: Path, language: Optional[str]) -> str:
         if self.service == "groq":
-            response = self.client.audio.transcriptions.create(
-                file=audio_file.open("rb"),
-                model="whisper-large-v3",
-                language=language
-            )
-        else:
-            response = self.client.audio.transcriptions.create(
-                file=audio_file.open("rb"),
-                model="whisper-1",
-                language=language
-            )
-        return response.text
+            with audio_file.open("rb") as audio:
+                response = self.client.audio.transcriptions.create(
+                    file=audio,
+                    model=GROQ_STT_MODEL,
+                    language=language
+                )
+            return response.text
+
+        if self.service == "openai":
+            with audio_file.open("rb") as audio:
+                response = self.client.audio.transcriptions.create(
+                    file=audio,
+                    model=OPENAI_STT_MODEL,
+                    language=language
+                )
+            return response.text
+
+        return self._transcribe_openrouter(audio_file, language)
+
+    def _transcribe_openrouter(self, audio_file: Path, language: Optional[str]) -> str:
+        audio_format = audio_file.suffix.lower().lstrip(".") or "wav"
+        payload = {
+            "model": OPENROUTER_STT_MODEL,
+            "input_audio": {
+                "data": base64.b64encode(audio_file.read_bytes()).decode("ascii"),
+                "format": audio_format
+            }
+        }
+        if language:
+            payload["language"] = language
+
+        request = urllib.request.Request(
+            OPENROUTER_STT_URL,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            },
+            method="POST"
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                data = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"OpenRouter transcription failed ({e.code}): {error_body}") from e
+        except urllib.error.URLError as e:
+            raise RuntimeError(f"OpenRouter transcription failed: {e.reason}") from e
+
+        text = data.get("text")
+        if not isinstance(text, str):
+            raise RuntimeError(f"OpenRouter transcription response missing text: {data}")
+
+        return text
 
 # ____________________________________________________________________________________________
 
-def transcribe_audio(audio_file_path: Path, language: str, service: str) -> str:
+def transcribe_audio(audio_file_path: Path, language: Optional[str], service: str) -> str:
     """Transcribe audio file and return the text"""
     transcriber = Transcriber(service=service)
     text = transcriber.transcribe(audio_file_path, language)
@@ -260,8 +323,8 @@ def main():
     parser = argparse.ArgumentParser(description="Speech to Text Conversion")
     parser.add_argument("-l", "--language", type=str, default=None,
                       help="Optional language code (e.g., 'en', 'pl'). Auto-detected if not specified")
-    parser.add_argument("-s", "--service", type=str, choices=['groq', 'whisper'],
-                      default="groq", help="STT service to use")
+    parser.add_argument("-s", "--service", type=str, choices=["groq", "openai", "openrouter"],
+                      default="groq", help="STT service to use (default: groq)")
     parser.add_argument("-i", "--input", type=str,
                       help="Process existing audio file instead of recording")
     args = parser.parse_args()
@@ -274,8 +337,9 @@ def main():
             print(f"Error: File '{args.input}' not found")
             return
 
-        if input_path.suffix.lower() != ".wav":
-            print(f"Warning: File '{args.input}' is not a .wav file, transcription may fail")
+        audio_format = input_path.suffix.lower().lstrip(".")
+        if audio_format not in SUPPORTED_AUDIO_FORMATS:
+            print(f"Warning: File '{args.input}' has an uncommon audio format, transcription may fail")
 
         print(f"File mode: processing {input_path.name}...")
 

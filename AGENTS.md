@@ -5,8 +5,8 @@ This file provides comprehensive guidance for understanding, using, and developi
 ## 1. Project Overview
 
 `letstalk` is a Python-based speech toolkit with two core utilities:
-- **listen.py**: Speech-to-text (STT) using Whisper via Groq or OpenAI
-- **talk.py**: Text-to-speech (TTS) using OpenAI's TTS models
+- **listen.py**: Speech-to-text (STT) using Whisper via Groq, OpenAI, or OpenRouter
+- **talk.py**: Text-to-speech (TTS) using OpenRouter or OpenAI
 
 Both scripts are designed as standalone command-line tools with no shared modules.
 
@@ -38,6 +38,7 @@ The scripts require API keys configured as environment variables:
 - `OPENAI_API_KEY_TTS`: For text-to-speech (talk.py)
 - `OPENAI_API_KEY_STT`: For OpenAI Whisper transcription (listen.py)
 - `GROQ_API_KEY_STT`: For Groq Whisper transcription (listen.py)
+- `OPENROUTER_API_KEY_STT_TTS`: For OpenRouter TTS and STT
 
 ### 2.3. Common Commands
 
@@ -67,13 +68,12 @@ Without -p, audio is saved to temp file and playback command is printed.
 Options:
 - `-i/--input-file`: Read text from file (mutually exclusive with -t and piped stdin)
 - `-t/--text`: Provide text directly in quotes (mutually exclusive with -i and piped stdin)
-- `-o/--output-file`: Save to specific file (mutually exclusive with -p)
-- `-p/--play`: Play immediately with cvlc and save to temp file (mutually exclusive with -o)
-- `-m/--model`: TTS model (tts-1 or tts-1-hd)
-- `-v/--voice`: Voice selection (alloy, echo, fable, onyx, nova, shimmer)
+- `-p/--play`: Play immediately with cvlc and save to temp file
+- `-s/--service`: TTS service (`openrouter` or `openai`, default: `openrouter`)
 
-Available voices: alloy, echo, fable, onyx, nova, shimmer
-Available models: tts-1, tts-1-hd
+TTS models and voices are fixed by service:
+- OpenRouter: `google/gemini-3.1-flash-tts-preview` with `Zephyr`, saved as WAV
+- OpenAI: `tts-1` with `nova`, saved as MP3
 
 #### Speech-to-Text (listen.py)
 
@@ -91,7 +91,7 @@ python listen.py -i recording.wav -s groq # with pip
 
 Options:
 - `-l/--language`: Language code (e.g., 'en', 'pl')
-- `-s/--service`: STT service (groq or whisper)
+- `-s/--service`: STT service (`groq`, `openai`, or `openrouter`; default: `groq`)
 - `-i/--input`: Process existing audio file instead of recording
 
 **Recording controls:**
@@ -109,21 +109,23 @@ Options:
 
 ### 3.1. talk.py Architecture
 
-- **Speaker class**: Handles OpenAI TTS API calls
+- **Speaker class**: Handles TTS API calls via OpenRouter or OpenAI
   - Chunks text into MAX_CHARS (4096) segments at sentence boundaries
   - Processes chunks sequentially and concatenates audio
   - Smart chunking tries sentence breaks (. ! ?), then line breaks, then spaces
+  - Uses fixed service-specific defaults: OpenRouter Gemini TTS with Zephyr and WAV output, or OpenAI tts-1 with nova and MP3 output
+  - Calls OpenRouter TTS with direct standard-library HTTP because Gemini TTS returns raw PCM audio
 
 - **Input modes** (mutually exclusive):
   - File mode: Read from file specified with -i (default: in.txt)
   - Direct mode: Accept text from command-line with -t
   - Stdin mode: Read from piped stdin (implicit detection via sys.stdin.isatty())
 
-- **Output modes** (mutually exclusive):
-  - Save mode: Write to file specified with -o (default: out.mp3)
-  - Play mode: Save to timestamped temp file and play with cvlc
+- **Output modes**:
+  - Save mode: Write to a timestamped temp file
+  - Play mode: Save to a timestamped temp file and play with cvlc
 
-- **Main flow**: Read/receive text → chunk if needed → generate audio → save MP3 → optionally play
+- **Main flow**: Read/receive text → chunk if needed → generate audio → save audio file → optionally play
 
 ### 3.2. listen.py Architecture
 
@@ -142,14 +144,15 @@ Options:
   - Shows amplitude meter + state indicator: [RECORDING] / [PAUSED]
   - Context manager: restores terminal settings and cleans up PyAudio
 
-- **Transcriber class**: Supports two STT services
+- **Transcriber class**: Supports three STT services
   - Groq: whisper-large-v3 model
   - OpenAI: whisper-1 model
-  - Same interface for both services
+  - OpenRouter: openai/whisper-large-v3-turbo model
+  - Same interface for all three services
 
 - **Two modes**:
   - Recording mode (default): Record with manual pause/resume → transcribe each segment incrementally → join and copy full text to clipboard (segment audio files preserved)
-  - File mode: Read existing WAV → transcribe → copy to clipboard
+  - File mode: Read existing audio file → transcribe → copy to clipboard
 
 ### 3.3. Key Design Decisions
 
@@ -158,7 +161,7 @@ Options:
 3. **Voice detection**: Amplitude-based (no ML) for simplicity and speed
 4. **Text chunking**: Sentence-aware to avoid mid-word cuts in TTS
 5. **Clipboard integration**: listen.py auto-copies transcription for quick pasting
-6. **Mutual exclusivity**: Both input modes (-i/-t) and output modes (-o/-p) in talk.py are enforced at argparse level
+6. **Mutual exclusivity**: Input modes (-i/-t/piped stdin) in talk.py are enforced via argparse plus stdin detection
 7. **Stdin input detection**: talk.py uses sys.stdin.isatty() to detect piped input, with manual validation for mutual exclusivity since argparse doesn't support stdin in mutually exclusive groups
 8. **Temp file preservation**: Play mode keeps generated audio in temp directory for later replay
 9. **cvlc integration**: Immediate playback mode checks for cvlc availability before processing
@@ -169,7 +172,7 @@ Options:
 ### 3.4. Important Constants
 
 **talk.py:**
-- `MAX_CHARS = 4096`: OpenAI TTS character limit per request
+- `MAX_CHARS = 4096`: Conservative TTS request chunk size
 
 **listen.py:**
 - `CHUNK = 1024`: Audio buffer size in frames

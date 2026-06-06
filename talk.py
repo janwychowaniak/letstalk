@@ -11,24 +11,59 @@
 
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.request
+import wave
 from datetime import datetime
 
 import openai
 
 # ____________________________________________________________________________________________
 
-MAX_CHARS = 4096  # OpenAI TTS character limit
+MAX_CHARS = 4096  # Conservative TTS request chunk size
+OPENROUTER_TTS_URL = "https://openrouter.ai/api/v1/audio/speech"
+OPENROUTER_TTS_MODEL = "google/gemini-3.1-flash-tts-preview"
+OPENROUTER_TTS_VOICE = "Zephyr"
+OPENROUTER_TTS_FORMAT = "pcm"
+OPENROUTER_TTS_SAMPLE_RATE = 24000
+OPENAI_TTS_MODEL = "tts-1"
+OPENAI_TTS_VOICE = "nova"
+OPENAI_TTS_FORMAT = "mp3"
+SENTENCE_ENDINGS = (".", "!", "?", ":", ";")
+
+
+def get_required_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
+
 
 class Speaker:
-    def __init__(self):
-        self.client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY_TTS"))
+    def __init__(self, service: str):
+        self.service = service
+        if service == "openrouter":
+            self.api_key = get_required_env("OPENROUTER_API_KEY_STT_TTS")
+            self.model = OPENROUTER_TTS_MODEL
+            self.voice = OPENROUTER_TTS_VOICE
+            self.response_format = OPENROUTER_TTS_FORMAT
+            self.output_suffix = "wav"
+        elif service == "openai":
+            self.client = openai.OpenAI(api_key=get_required_env("OPENAI_API_KEY_TTS"))
+            self.model = OPENAI_TTS_MODEL
+            self.voice = OPENAI_TTS_VOICE
+            self.response_format = OPENAI_TTS_FORMAT
+            self.output_suffix = "mp3"
+        else:
+            raise ValueError(f"Unsupported TTS service: {service}")
 
-    def speak(self, text: str, model: str, voice: str) -> bytes:
+    def speak(self, text: str) -> bytes:
         # Split text into chunks of MAX_CHARS, trying to break at sentences
         chunks = []
         while text:
@@ -60,15 +95,81 @@ class Speaker:
         for i, chunk in enumerate(chunks, 1):
             if total_chunks > 1:
                 print(f"Processing chunk {i}/{total_chunks}...")
-            response = self.client.audio.speech.create(
-                model=model,
-                voice=voice,
-                input=chunk
-            )
-            audio_chunks.append(response.content)
+            audio_chunks.append(self._create_speech(chunk))
 
         # Combine all chunks into single audio stream
         return b"".join(audio_chunks)
+
+    def _create_speech(self, text: str) -> bytes:
+        if self.service == "openrouter":
+            return self._create_openrouter_speech(text)
+
+        response = self.client.audio.speech.create(
+            model=self.model,
+            voice=self.voice,
+            input=text,
+            response_format=self.response_format
+        )
+        if not response.content:
+            raise RuntimeError("OpenAI returned an empty audio response")
+        return response.content
+
+    def _create_openrouter_speech(self, text: str) -> bytes:
+        request_text = text.rstrip()
+        if not request_text.endswith(SENTENCE_ENDINGS):
+            # Gemini TTS can return a 200 with empty PCM for some unterminated phrases.
+            request_text = f"{request_text}."
+
+        payload = {
+            "model": self.model,
+            "input": request_text,
+            "voice": self.voice,
+            "response_format": self.response_format
+        }
+        request = urllib.request.Request(
+            OPENROUTER_TTS_URL,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            },
+            method="POST"
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                content_type = response.headers.get("content-type", "")
+                generation_id = response.headers.get("x-generation-id", "unknown")
+                audio_data = response.read()
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"OpenRouter speech failed ({e.code}): {error_body}") from e
+        except urllib.error.URLError as e:
+            raise RuntimeError(f"OpenRouter speech failed: {e.reason}") from e
+
+        if not content_type.startswith("audio/"):
+            preview = audio_data[:500].decode("utf-8", errors="replace")
+            raise RuntimeError(f"OpenRouter returned non-audio response: {preview}")
+
+        if not audio_data:
+            raise RuntimeError(f"OpenRouter returned an empty audio response ({generation_id})")
+
+        return audio_data
+
+    def save_audio(self, audio_data: bytes, output_file: str) -> None:
+        if not audio_data:
+            raise RuntimeError("Refusing to save empty audio")
+
+        if self.response_format == "pcm":
+            with wave.open(output_file, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(OPENROUTER_TTS_SAMPLE_RATE)
+                wf.writeframes(audio_data)
+            return
+
+        with open(output_file, "wb") as f:
+            f.write(audio_data)
 
 # ____________________________________________________________________________________________
 
@@ -100,16 +201,14 @@ def main():
     parser.add_argument("-p", "--play", action="store_true",
                       help="Play audio immediately using cvlc (after saving to temp file)")
 
-    parser.add_argument("-m", "--model", type=str, default="tts-1",
-                      choices=["tts-1", "tts-1-hd"],
-                      help="TTS model to use (default: tts-1)")
-    parser.add_argument("-v", "--voice", type=str, default="nova",
-                      choices=["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
-                      help="Voice to use (default: nova)")
+    parser.add_argument("-s", "--service", type=str, default="openrouter",
+                      choices=["openrouter", "openai"],
+                      help="TTS service to use (default: openrouter)")
     args = parser.parse_args()
 
-    # Detect if data is being piped via stdin
-    stdin_has_data = not sys.stdin.isatty()
+    # Detect piped stdin, but do not treat an empty non-tty stdin as an input source.
+    stdin_text = sys.stdin.read().strip() if not sys.stdin.isatty() else ""
+    stdin_has_data = bool(stdin_text)
 
     # Validate mutual exclusivity of input sources
     input_sources = sum([
@@ -131,7 +230,7 @@ def main():
 
         # Determine text source (three mutually exclusive ways)
         if stdin_has_data:
-            text = sys.stdin.read().strip()
+            text = stdin_text
             source = "stdin"
         elif args.text:
             text = args.text.strip()
@@ -147,18 +246,22 @@ def main():
             print(f"No text found from {source}")
             return
 
+        speaker = Speaker(service=args.service)
         print(f"input_len[/max_chars]: {len(text)}[/{MAX_CHARS}]")
-        print(f"Converting text to speech using {args.model} with {args.voice} voice...")
-        speaker = Speaker()
-        audio_data = speaker.speak(text, args.model, args.voice)
+        print(f"Converting text to speech via {args.service} "
+              f"using {speaker.model} with {speaker.voice} voice "
+              f"as {speaker.response_format}...")
+        audio_data = speaker.speak(text)
 
         # Determine output file (always temp with timestamp)
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        output_file = os.path.join(tempfile.gettempdir(), f"talk-out-{timestamp}.mp3")
+        output_file = os.path.join(
+            tempfile.gettempdir(),
+            f"talk-out-{timestamp}.{speaker.output_suffix}"
+        )
 
         # Save audio file
-        with open(output_file, "wb") as f:
-            f.write(audio_data)
+        speaker.save_audio(audio_data, output_file)
 
         print(f"Audio saved to: {output_file}")
 
