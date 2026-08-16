@@ -137,7 +137,7 @@ class Speaker:
         )
 
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:
+            with urllib.request.urlopen(request, timeout=300) as response:
                 content_type = response.headers.get("content-type", "")
                 generation_id = response.headers.get("x-generation-id", "unknown")
                 audio_data = response.read()
@@ -199,7 +199,7 @@ def main():
                       help="Text to convert (provide text directly in quotes). Mutually exclusive with -i and piped stdin")
 
     parser.add_argument("-p", "--play", action="store_true",
-                      help="Play audio immediately using cvlc (after saving to temp file)")
+                      help="Play audio immediately using vlc (after saving to temp file)")
 
     parser.add_argument("-s", "--service", type=str, default="openrouter",
                       choices=["openrouter", "openai"],
@@ -222,10 +222,10 @@ def main():
         return
 
     try:
-        # Check cvlc availability if play mode requested
+        # Check vlc availability if play mode requested
         if args.play:
-            if not shutil.which("cvlc"):
-                print("Error: cvlc not found. Please install VLC media player.")
+            if not shutil.which("vlc"):
+                print("Error: vlc not found. Please install VLC media player.")
                 return
 
         # Determine text source (three mutually exclusive ways)
@@ -268,11 +268,11 @@ def main():
         # Play audio if requested
         if args.play:
             try:
-                subprocess.run(["cvlc", "--rate=1.3", "--play-and-exit", output_file], check=True)
+                subprocess.run(["vlc", "--rate=1.1", "--play-and-exit", output_file], check=True)
             except subprocess.CalledProcessError as e:
                 print(f"Error playing audio: {e}")
 
-        print(f"\nTo play:\nvlc --rate=1.3 --play-and-exit \"{output_file}\"")
+        print(f"\nTo play:\nvlc --rate=1.1 --play-and-exit \"{output_file}\"")
 
     except FileNotFoundError:
         input_file = args.input_file if args.input_file else "in.txt"
